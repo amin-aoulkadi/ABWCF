@@ -16,12 +16,12 @@ class UrlNormalizerSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
         """)
     .withFallback(BehaviorTestKit.ApplicationTestConfig)
 
-  private val inbox = TestInbox[UrlNormalizer.Result]()
+  private val inbox = TestInbox[UrlFilter.Command]()
   private val testKit = BehaviorTestKit(UrlNormalizer(inbox.ref), "testkit", config)
 
   def test(input: String, expectedResult: String): Unit = {
     testKit.run(UrlNormalizer.Normalize(input))
-    inbox.expectMessage(UrlNormalizer.NormalizedUrl(expectedResult))
+    inbox.expectMessage(UrlFilter.Filter(expectedResult))
   }
 
   "UrlNormalizer" should "not change URLs that are already in normal form" in {

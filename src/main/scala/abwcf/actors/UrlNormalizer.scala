@@ -21,11 +21,8 @@ object UrlNormalizer {
   sealed trait Command
   case class Normalize(url: String) extends Command
 
-  sealed trait Result
-  case class NormalizedUrl(url: String) extends Result
-
   @throws[URISyntaxException]
-  def apply(sendTo: ActorRef[Result]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(urlFilter: ActorRef[UrlFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
     val removeUserInfo = config.getBoolean("abwcf.url-normalizer.remove-userinfo")
     val removeQuery = config.getBoolean("abwcf.url-normalizer.remove-query")
@@ -52,7 +49,7 @@ object UrlNormalizer {
         if query != null then builder += '?' ++= query
         if fragment != null then builder += '#' ++= fragment
 
-        sendTo ! NormalizedUrl(builder.toString)
+        urlFilter ! UrlFilter.Filter(builder.toString)
         Behaviors.same
     })
   })

@@ -13,13 +13,21 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
   
   def apply(): Behavior[Command] = Behaviors.setup(context => {
-    val printActor = context.spawnAnonymous(Behaviors.receiveMessage[Any](msg => {
-      println(msg)
-      Behaviors.same
-    }))
+    val pageManager = context.spawn(
+      Behaviors.supervise(PageManager())
+        .onFailure(SupervisorStrategy.resume), //The PageManager is stateless, so resuming it is safe.
+      "page-manager"
+    )
+
+    val urlFilter = context.spawn(
+      Behaviors.supervise(UrlFilter(pageManager))
+        .onFailure(SupervisorStrategy.resume), //The UrlFilter is stateless, so resuming it is safe.
+      "url-filter"
+    )
     
     val urlNormalizer = context.spawn(
-      Behaviors.supervise(UrlNormalizer(printActor)).onFailure[URISyntaxException](SupervisorStrategy.resume), //The UrlNormalizer is stateless, so resuming it is safe.
+      Behaviors.supervise(UrlNormalizer(urlFilter))
+        .onFailure[URISyntaxException](SupervisorStrategy.resume), //The UrlNormalizer is stateless, so resuming it is safe.
       "url-normalizer"
     )
     
