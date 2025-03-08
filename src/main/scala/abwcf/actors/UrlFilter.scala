@@ -6,6 +6,8 @@ import org.apache.pekko.actor.typed.scaladsl.Behaviors
 /**
  * Applies black- and whitelist filtering to discard URLs that should not be crawled.
  * 
+ * There should be one [[UrlFilter]] actor per node.
+ * 
  * This actor is stateless.
  */
 object UrlFilter {

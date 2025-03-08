@@ -8,6 +8,8 @@ import java.util.Locale
 
 /**
  * Normalizes URLs and removes user information, query and fragment URL components as configured.
+ * 
+ * There should be one [[UrlNormalizer]] actor per node.
  *
  * This actor is stateless.
  *

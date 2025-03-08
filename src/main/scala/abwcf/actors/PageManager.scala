@@ -8,6 +8,8 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity
 /**
  * Creates [[Page]] actors.
  *
+ * There should be one [[PageManager]] actor per node.
+ *
  * This actor is stateless.
  */
 object PageManager {
@@ -15,11 +17,11 @@ object PageManager {
   case class Spawn(url: String) extends Command
 
   def apply(): Behavior[Command] = Behaviors.setup(context => {
-    val pageShardRegion = ClusterSharding(context.system).init(Entity(Page.TypeKey)(entityContext => Page(entityContext.entityId)))
+    val pageShardRegion = ClusterSharding(context.system).init(Entity(Page.TypeKey)(_ => Page()))
 
     Behaviors.receiveMessage({
       case Spawn(url) =>
-        pageShardRegion ! ShardingEnvelope(url, Page.Start)
+        pageShardRegion ! ShardingEnvelope(url, Page.Discover(url))
         Behaviors.same
     })
   })

@@ -7,6 +7,8 @@ import java.net.URISyntaxException
 
 /**
  * This actor is the user guardian actor for the ABWCF.
+ * 
+ * There should be exactly one [[Crawler]] actor per node.
  */
 object Crawler {
   sealed trait Command
