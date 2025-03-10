@@ -17,7 +17,7 @@ import scala.collection.immutable.Queue
  *
  * Entity ID: Domain name or IP address of the host.
  */
-object HostQueue { //TODO: HostQueues must be exempt from (automatic) passivation!
+object HostQueue { //TODO: Handle (automatic) passivation and handle HostQueues being moved to a different node!
   val TypeKey: EntityTypeKey[Command] = EntityTypeKey("HostQueue")
   val HostQueueServiceKey: ServiceKey[Command] = ServiceKey("HostQueue")
 

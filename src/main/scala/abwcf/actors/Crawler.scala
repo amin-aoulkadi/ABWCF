@@ -6,7 +6,7 @@ import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import java.net.URISyntaxException
 
 /**
- * This actor is the user guardian actor for the ABWCF.
+ * The user guardian actor for the ABWCF.
  * 
  * There should be exactly one [[Crawler]] actor per node.
  */
@@ -15,6 +15,18 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
   
   def apply(): Behavior[Command] = Behaviors.setup(context => {
+    val balancer = context.spawn(
+      Behaviors.supervise(Balancer())
+        .onFailure(SupervisorStrategy.resume), //The Balancer is stateless, so resuming it should be safe.
+      "balancer"
+    )
+
+    val fetcherManager = context.spawn(
+      Behaviors.supervise(FetcherManager(balancer))
+        .onFailure(SupervisorStrategy.resume), //The FetcherManager is stateless, so resuming it should be safe.
+      "fetcher-manager"
+    )
+    
     val pageManager = context.spawn(
       Behaviors.supervise(PageManager())
         .onFailure(SupervisorStrategy.resume), //The PageManager is stateless, so resuming it is safe.

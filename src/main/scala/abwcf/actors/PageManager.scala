@@ -20,7 +20,7 @@ object PageManager {
     val pageShardRegion = ClusterSharding(context.system).init(Entity(Page.TypeKey)(entityContext => Page(entityContext.entityId)))
 
     Behaviors.receiveMessage({
-      case Spawn(url) =>
+      case Spawn(url) => //TODO: Add database lookup (with a small cache).
         pageShardRegion ! ShardingEnvelope(url, Page.Discover)
         Behaviors.same
     })
