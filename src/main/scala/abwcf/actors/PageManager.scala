@@ -17,11 +17,11 @@ object PageManager {
   case class Spawn(url: String) extends Command
 
   def apply(): Behavior[Command] = Behaviors.setup(context => {
-    val pageShardRegion = ClusterSharding(context.system).init(Entity(Page.TypeKey)(_ => Page()))
+    val pageShardRegion = ClusterSharding(context.system).init(Entity(Page.TypeKey)(entityContext => Page(entityContext.entityId)))
 
     Behaviors.receiveMessage({
       case Spawn(url) =>
-        pageShardRegion ! ShardingEnvelope(url, Page.Discover(url))
+        pageShardRegion ! ShardingEnvelope(url, Page.Discover)
         Behaviors.same
     })
   })

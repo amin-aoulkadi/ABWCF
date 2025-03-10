@@ -1,7 +1,8 @@
 package abwcf.actors
 
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import abwcf.actors.Page.Status.{Discovered, Undefined}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 
@@ -11,35 +12,38 @@ import java.net.URI
  * Represents a page to be crawled.
  *
  * There should be exactly one [[Page]] actor per page.
- * 
- * This actor is sharded.
+ *
+ * This actor is stateful and sharded.
  *
  * Entity ID: URL of the page.
  */
 object Page {
   val TypeKey: EntityTypeKey[Command] = EntityTypeKey("Page")
+
+  enum Status:
+    case Undefined, Discovered
   
   sealed trait Command
-  case class Discover(url: String) extends Command
-
-  private case class State(
-                            hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-                            url: String
-                          )
+  case object Discover extends Command
   
-  def apply(): Behavior[Command] = Behaviors.setup(context => {
+  def apply(url: String): Behavior[Command] = Behaviors.setup(context => {
     val hostQueueShardRegion = ClusterSharding(context.system).init(Entity(HostQueue.TypeKey)(_ => HostQueue()))
-    statefulBehavior(State(hostQueueShardRegion, null))
+    new Page(url, hostQueueShardRegion).page(Undefined)
   })
+}
 
-  private def statefulBehavior(state: State): Behavior[Command] = Behaviors.receiveMessage({
-    case Discover(url) =>
-      if (state.url == null) { //The page has not been discovered yet.
-        val host = URI(url).getHost
-        state.hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(url))
-        statefulBehavior(state.copy(url = url))
-      } else { //The page has already been discovered.
-        Behaviors.same
-      }
+private class Page private (url: String,
+                    hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]]) {
+  import Page.*
+  
+  private def page(status: Status): Behavior[Command] = Behaviors.receiveMessage({
+    case Discover if status == Undefined =>
+      //Add the page to a HostQueue so that it can be fetched:
+      val host = URI(url).getHost
+      hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(url))
+      page(Discovered)
+
+    case Discover => //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
+      Behaviors.same
   })
 }
