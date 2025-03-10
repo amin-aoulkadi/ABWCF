@@ -1,11 +1,11 @@
 package abwcf.actors
 
 import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
-import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
+import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.EntityTypeKey
 
-import java.time.Instant
+import java.time.{Duration, Instant}
 import scala.collection.immutable.Queue
 
 /**
@@ -30,13 +30,16 @@ object HostQueue { //TODO: Handle (automatic) passivation and handle HostQueues 
   case object Unavailable extends Reply
 
   def apply(): Behavior[Command] = Behaviors.setup(context => {
-    //TODO: Read crawl delay from config.
-    context.system.receptionist ! Receptionist.Register(HostQueueServiceKey, context.self) //Caution: According to the Pekko documentation, the scalability of the receptionist is limited. This could be a problem for crawls with a large number of hosts.
-    new HostQueue(context).hostQueue(Queue.empty, Instant.MIN)
+    val config = context.system.settings.config
+    val crawlDelay = config.getDuration("abwcf.host-queue.crawl-delay")
+
+    context.system.receptionist ! Receptionist.Register(HostQueueServiceKey, context.self)
+
+    new HostQueue(crawlDelay).hostQueue(Queue.empty, Instant.MIN)
   })
 }
 
-private class HostQueue private (context: ActorContext[HostQueue.Command]) {
+private class HostQueue private (crawlDelay: Duration) {
   import HostQueue.*
 
   private def hostQueue(urls: Queue[String], crawlDelayEnd: Instant): Behavior[Command] = Behaviors.receiveMessage({
@@ -48,10 +51,9 @@ private class HostQueue private (context: ActorContext[HostQueue.Command]) {
       replyTo ! Head(head)
   
       if (tail.isEmpty) {
-        //context.system.receptionist ! Receptionist.Deregister(HostQueueServiceKey, context.self)
         Behaviors.stopped //TODO: What about messages that are already in or in flight to the inbox of this actor?
       } else {
-        hostQueue(tail, Instant.now.plusSeconds(1)) //TODO: Maybe wait until the page has been fetched?
+        hostQueue(tail, Instant.now.plus(crawlDelay)) //TODO: Maybe wait until the page has been fetched?
       }
         
     case GetHead(replyTo) =>
