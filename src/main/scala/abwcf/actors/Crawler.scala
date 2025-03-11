@@ -23,7 +23,7 @@ object Crawler {
 
     val fetcherManager = context.spawn(
       Behaviors.supervise(FetcherManager(hostQueueRouter))
-        .onFailure(SupervisorStrategy.resume), //The FetcherManager is stateless, so resuming it should be safe.
+        .onFailure(SupervisorStrategy.restart),
       "fetcher-manager"
     )
     
