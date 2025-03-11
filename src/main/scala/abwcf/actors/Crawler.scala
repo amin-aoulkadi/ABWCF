@@ -15,14 +15,14 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
   
   def apply(): Behavior[Command] = Behaviors.setup(context => {
-    val balancer = context.spawn(
-      Behaviors.supervise(Balancer())
-        .onFailure(SupervisorStrategy.resume), //The Balancer is stateless, so resuming it should be safe.
-      "balancer"
+    val hostQueueRouter = context.spawn(
+      Behaviors.supervise(HostQueueRouter())
+        .onFailure(SupervisorStrategy.resume), //The HostQueueRouter is stateless, so resuming it should be safe.
+      "host-queue-router"
     )
 
     val fetcherManager = context.spawn(
-      Behaviors.supervise(FetcherManager(balancer))
+      Behaviors.supervise(FetcherManager(hostQueueRouter))
         .onFailure(SupervisorStrategy.resume), //The FetcherManager is stateless, so resuming it should be safe.
       "fetcher-manager"
     )

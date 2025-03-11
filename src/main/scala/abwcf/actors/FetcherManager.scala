@@ -11,10 +11,10 @@ import org.apache.pekko.actor.typed.scaladsl.Behaviors
  * This actor is stateless.
  */
 object FetcherManager {
-  def apply(balancer: ActorRef[HostQueue.Command]): Behavior[Nothing] = Behaviors.setup(context => {
+  def apply(hostQueueRouter: ActorRef[HostQueue.Command]): Behavior[Nothing] = Behaviors.setup(context => {
     //TODO: Implement logic.
-    context.spawnAnonymous(Fetcher(balancer))
-    context.spawnAnonymous(Fetcher(balancer))
+    context.spawnAnonymous(Fetcher(hostQueueRouter))
+    context.spawnAnonymous(Fetcher(hostQueueRouter))
     Behaviors.ignore
   })
 }

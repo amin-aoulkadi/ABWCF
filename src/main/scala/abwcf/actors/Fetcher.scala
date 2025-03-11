@@ -14,10 +14,10 @@ object Fetcher {
 
   private type CombinedMessages = Command | HostQueue.Reply
 
-  def apply(balancer: ActorRef[HostQueue.Command]): Behavior[Command] = Behaviors.setup[CombinedMessages](context => {
+  def apply(hostQueueRouter: ActorRef[HostQueue.Command]): Behavior[Command] = Behaviors.setup[CombinedMessages](context => {
     val getHeadTimeout: Timeout = 3 seconds //TODO: Add to config.
 
-    def requestUrl(): Unit = context.ask(balancer, HostQueue.GetHead.apply) {
+    def requestUrl(): Unit = context.ask(hostQueueRouter, HostQueue.GetHead.apply) {
       case Success(reply: HostQueue.Reply) => reply
       case Failure(_) => AskFailure
     }(getHeadTimeout)
