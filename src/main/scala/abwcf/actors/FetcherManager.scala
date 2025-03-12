@@ -1,7 +1,7 @@
 package abwcf.actors
 
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
 import org.apache.pekko.cluster.sharding.ShardRegion
 import org.apache.pekko.cluster.sharding.typed.GetClusterShardingStats
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -55,13 +55,17 @@ private class FetcherManager private (hostQueueRouter: ActorRef[HostQueue.Comman
 
       //Spawn more Fetchers if needed:
       while scaledFetchers.length < target do {
-        val fetcher = context.spawnAnonymous(Fetcher(hostQueueRouter)) //TODO: Dedicated thread pool for async fetching.
+        val fetcher = context.spawnAnonymous( //TODO: Dedicated thread pool for async fetching.
+          Behaviors.supervise(Fetcher(hostQueueRouter))
+            .onFailure(SupervisorStrategy.restart.withLoggingEnabled(true))
+        )
+        
         scaledFetchers = scaledFetchers.prepended(fetcher)
       }
 
       //Stop excess Fetchers if needed:
       while scaledFetchers.length > target do {
-        context.stop(scaledFetchers.head)
+        scaledFetchers.head ! Fetcher.Stop
         scaledFetchers = scaledFetchers.tail
       }
 

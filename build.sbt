@@ -8,6 +8,7 @@ lazy val root = (project in file("."))
   )
 
 val pekkoVersion = "1.1.3" //License: Apache-2.0
+val pekkoHttpVersion = "1.1.0" //License: Apache-2.0
 val logbackVersion = "1.5.17" //License: EPL / LGPL (dual license) → Derivative work must also be licensed under one of these.
 val scalaTestVersion = "3.2.19" //License: Apache-2.0
 
@@ -16,6 +17,8 @@ libraryDependencies ++= Seq(
   "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
   "org.apache.pekko" %% "pekko-cluster-typed" % pekkoVersion,
   "org.apache.pekko" %% "pekko-cluster-sharding-typed" % pekkoVersion,
+  "org.apache.pekko" %% "pekko-stream" % pekkoVersion,
+  "org.apache.pekko" %% "pekko-http" % pekkoHttpVersion,
   "ch.qos.logback" % "logback-classic" % logbackVersion % Runtime, //This dependency should probably not be included in release packages.
   "org.scalatest" %% "scalatest" % scalaTestVersion % Test
 )
