@@ -26,9 +26,9 @@ object Fetcher {
   private case class FutureSuccess(value: HttpResponse | ByteString) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
-  private type CombinedMessages = Command | HostQueue.Reply //TODO: Rename to CombinedCommand.
+  private type CombinedCommand = Command | HostQueue.Reply
 
-  def apply(hostQueueRouter: ActorRef[HostQueue.Command]): Behavior[Command] = Behaviors.setup[CombinedMessages](context => {
+  def apply(hostQueueRouter: ActorRef[HostQueue.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withStash(5)(buffer => {
       val http = Http(context.system.toClassic)
       val materializer = Materializer(context)
@@ -47,11 +47,11 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
                                materializer: Materializer,
                                urlRequestTimeout: Timeout,
                                bytesPerSec: Int,
-                               context: ActorContext[Fetcher.CombinedMessages],
-                               buffer: StashBuffer[Fetcher.CombinedMessages]) {
+                               context: ActorContext[Fetcher.CombinedCommand],
+                               buffer: StashBuffer[Fetcher.CombinedCommand]) {
   import Fetcher.*
 
-  private def requestNextUrl(): Behavior[CombinedMessages] = {
+  private def requestNextUrl(): Behavior[CombinedCommand] = {
     //Request a URL from the HostQueueRouter:
     context.ask(hostQueueRouter, HostQueue.GetHead.apply)({
       case Success(reply) => reply
@@ -85,7 +85,7 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
     })
   }
 
-  private def receiveHttpResponse(url: String): Behavior[CombinedMessages] = Behaviors.receiveMessage({
+  private def receiveHttpResponse(url: String): Behavior[CombinedCommand] = Behaviors.receiveMessage({
     case FutureSuccess(response: HttpResponse) => //The response entity must be consumed!
       context.log.info(response.status.toString) //TODO: Handle status codes.
 

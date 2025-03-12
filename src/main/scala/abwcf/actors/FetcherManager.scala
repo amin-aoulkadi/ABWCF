@@ -21,9 +21,9 @@ object FetcherManager {
   sealed trait Command
   private case object CheckHostQueues extends Command
 
-  private type CombinedMessages = Command | ShardRegion.ClusterShardingStats
+  private type CombinedCommand = Command | ShardRegion.ClusterShardingStats
 
-  def apply(hostQueueRouter: ActorRef[HostQueue.Command]): Behavior[Command] = Behaviors.setup[CombinedMessages](context => {
+  def apply(hostQueueRouter: ActorRef[HostQueue.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withTimers(timers => {
       //Periodically check the number of available HostQueues:
       timers.startTimerWithFixedDelay(CheckHostQueues, 5 seconds, 10 seconds) //TODO: Add to config.
@@ -34,10 +34,10 @@ object FetcherManager {
 }
 
 private class FetcherManager private (hostQueueRouter: ActorRef[HostQueue.Command],
-                                      context: ActorContext[FetcherManager.CombinedMessages]) {
+                                      context: ActorContext[FetcherManager.CombinedCommand]) {
   import FetcherManager.*
 
-  private def fetcherManager(fetchers: List[ActorRef[Fetcher.Command]]): Behavior[CombinedMessages] = Behaviors.receiveMessage({
+  private def fetcherManager(fetchers: List[ActorRef[Fetcher.Command]]): Behavior[CombinedCommand] = Behaviors.receiveMessage({
     case CheckHostQueues =>
       //Check the number of available HostQueues:
       ClusterSharding(context.system).shardState ! GetClusterShardingStats(HostQueue.TypeKey, 5 seconds, context.self)
