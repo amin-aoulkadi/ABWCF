@@ -23,17 +23,18 @@ object FetcherManager {
 
   private type CombinedCommand = Command | ShardRegion.ClusterShardingStats
 
-  def apply(hostQueueRouter: ActorRef[HostQueue.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+  def apply(hostQueueRouter: ActorRef[HostQueue.Command], crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withTimers(timers => {
       //Periodically check the number of available HostQueues:
       timers.startTimerWithFixedDelay(CheckHostQueues, 5 seconds, 10 seconds) //TODO: Add to config.
 
-      new FetcherManager(hostQueueRouter, context).fetcherManager(List.empty)
+      new FetcherManager(hostQueueRouter, crawlDepthLimiter, context).fetcherManager(List.empty)
     })
   }).narrow
 }
 
 private class FetcherManager private (hostQueueRouter: ActorRef[HostQueue.Command],
+                                      crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
                                       context: ActorContext[FetcherManager.CombinedCommand]) {
   import FetcherManager.*
 
@@ -55,8 +56,8 @@ private class FetcherManager private (hostQueueRouter: ActorRef[HostQueue.Comman
 
       //Spawn more Fetchers if needed:
       while scaledFetchers.length < target do {
-        val fetcher = context.spawnAnonymous( //TODO: Dedicated thread pool for async fetching.
-          Behaviors.supervise(Fetcher(hostQueueRouter))
+        val fetcher = context.spawnAnonymous( //TODO: Dedicated thread pool for async fetching? → https://pekko.apache.org/docs/pekko/current/index-network.html
+          Behaviors.supervise(Fetcher(hostQueueRouter, crawlDepthLimiter))
             .onFailure(SupervisorStrategy.restart.withLoggingEnabled(true))
         )
         

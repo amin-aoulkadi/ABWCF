@@ -28,7 +28,7 @@ object Fetcher {
 
   private type CombinedCommand = Command | HostQueue.Reply
 
-  def apply(hostQueueRouter: ActorRef[HostQueue.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+  def apply(hostQueueRouter: ActorRef[HostQueue.Command], crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withStash(5)(buffer => {
       val http = Http(context.system.toClassic)
       val materializer = Materializer(context)
@@ -37,12 +37,13 @@ object Fetcher {
       val urlRequestTimeout = 3 seconds
       val bytesPerSec = 1_000_000 //Don't make this value too small.
 
-      new Fetcher(hostQueueRouter, http, materializer, urlRequestTimeout, bytesPerSec, context, buffer).requestNextUrl()
+      new Fetcher(hostQueueRouter, crawlDepthLimiter, http, materializer, urlRequestTimeout, bytesPerSec, context, buffer).requestNextUrl()
     })
   }).narrow
 }
 
 private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
+                               crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
                                http: HttpExt,
                                materializer: Materializer,
                                urlRequestTimeout: Timeout,
@@ -63,6 +64,7 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
       case HostQueue.Head(url) =>
         context.log.info("Fetching {}", url)
 
+        //Send the HTTP request:
         val responseFuture = http.singleRequest(HttpRequest(uri = Uri(url)))
 
         context.pipeToSelf(responseFuture)({
@@ -87,8 +89,10 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
 
   private def receiveHttpResponse(url: String): Behavior[CombinedCommand] = Behaviors.receiveMessage({
     case FutureSuccess(response: HttpResponse) => //The response entity must be consumed!
-      context.log.info(response.status.toString) //TODO: Handle status codes.
+      context.log.info(response.status.toString) //TODO: Handle status codes and content types.
+//      response.entity.contentType == ContentTypes.`text/html(UTF-8)`
 
+      //Receive the response body:
       val byteFuture = response.entity.dataBytes
         .throttle(bytesPerSec, 1 second, bytes => bytes.length) //Throttles the stream and the download. The effect on network usage probably also depends on other factors (e.g. drivers) and is more noticeable during long downloads (e.g. 10 MB at 100 kB/s).
         .runReduce(_ ++ _)(using materializer)
@@ -100,8 +104,9 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
 
       Behaviors.same
 
-    case FutureSuccess(byteString: ByteString) =>
-      context.log.info("Received {} bytes for {}", byteString.length, url)
+    case FutureSuccess(responseBody: ByteString) =>
+      context.log.info("Received {} bytes for {}", responseBody.length, url)
+      crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(url, responseBody)
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>

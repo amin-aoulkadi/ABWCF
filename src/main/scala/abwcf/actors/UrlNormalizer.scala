@@ -33,7 +33,7 @@ object UrlNormalizer {
     Behaviors.receiveMessage({
       case Normalize(urlString) =>
         //Normalize and remove URL components as configured:
-        val uri = URI(urlString).normalize
+        val uri = URI(urlString).normalize()
         val scheme = uri.getScheme.toLowerCase(Locale.ROOT)
         val userInfo = if removeUserInfo then null else uri.getRawUserInfo
         val host = uri.getHost.toLowerCase(Locale.ROOT)
