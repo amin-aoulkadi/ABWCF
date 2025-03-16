@@ -2,8 +2,9 @@ package abwcf.actors
 
 import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.cluster.sharding.typed.scaladsl.EntityTypeKey
+import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
+import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
+import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 
 import java.time.{Duration, Instant}
 import scala.collection.immutable.Queue
@@ -13,13 +14,13 @@ import scala.collection.immutable.Queue
  *
  * There should be exactly one [[HostQueue]] actor per crawled host.
  *
- * This actor is stateful and sharded.
+ * This actor is stateful, sharded and registered with the receptionist.
  *
  * Entity ID: Domain name or IP address of the host.
  */
 object HostQueue { //TODO: Handle (automatic) passivation and handle HostQueues being moved to a different node!
   val TypeKey: EntityTypeKey[Command] = EntityTypeKey("HostQueue")
-  val HostQueueServiceKey: ServiceKey[Command] = ServiceKey("HostQueue")
+  val HQServiceKey: ServiceKey[Command] = ServiceKey("HostQueue")
 
   sealed trait Command
   case class Enqueue(url: String) extends Command
@@ -33,10 +34,14 @@ object HostQueue { //TODO: Handle (automatic) passivation and handle HostQueues 
     val config = context.system.settings.config
     val crawlDelay = config.getDuration("abwcf.host-queue.crawl-delay")
 
-    context.system.receptionist ! Receptionist.Register(HostQueueServiceKey, context.self)
+    context.system.receptionist ! Receptionist.Register(HQServiceKey, context.self)
 
     new HostQueue(crawlDelay).hostQueue(Queue.empty, Instant.MIN)
   })
+
+  def getShardRegion(system: ActorSystem[?]): ActorRef[ShardingEnvelope[Command]] = {
+    ClusterSharding(system).init(Entity(TypeKey)(_ => HostQueue()))
+  }
 }
 
 private class HostQueue private (crawlDelay: Duration) {
@@ -53,7 +58,7 @@ private class HostQueue private (crawlDelay: Duration) {
       if (tail.isEmpty) {
         Behaviors.stopped //TODO: What about messages that are already in or in flight to the inbox of this actor?
       } else {
-        hostQueue(tail, Instant.now.plus(crawlDelay)) //TODO: Maybe wait until the page has been fetched?
+        hostQueue(tail, Instant.now.plus(crawlDelay))
       }
         
     case GetHead(replyTo) =>

@@ -15,6 +15,12 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
   
   def apply(): Behavior[Command] = Behaviors.setup(context => {
+    context.spawn(
+      Behaviors.supervise(UserCodeRunner())
+        .onFailure(SupervisorStrategy.resume), //The UserCodeRunner is stateless, so resuming it is safe.
+      "user-code-runner"
+    )
+    
     val pageManager = context.spawn(
       Behaviors.supervise(PageManager())
         .onFailure(SupervisorStrategy.resume), //The PageManager is stateless, so resuming it is safe.

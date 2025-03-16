@@ -3,6 +3,7 @@ package abwcf.actors
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
 import org.apache.pekko.http.scaladsl.{Http, HttpExt}
 import org.apache.pekko.stream.Materializer
@@ -32,18 +33,20 @@ object Fetcher {
     Behaviors.withStash(5)(buffer => {
       val http = Http(context.system.toClassic)
       val materializer = Materializer(context)
+      val pageShardRegion = Page.getShardRegion(context.system)
 
       //TODO: Add these to config:
       val urlRequestTimeout = 3 seconds
       val bytesPerSec = 1_000_000 //Don't make this value too small.
 
-      new Fetcher(hostQueueRouter, crawlDepthLimiter, http, materializer, urlRequestTimeout, bytesPerSec, context, buffer).requestNextUrl()
+      new Fetcher(hostQueueRouter, crawlDepthLimiter, pageShardRegion, http, materializer, urlRequestTimeout, bytesPerSec, context, buffer).requestNextUrl()
     })
   }).narrow
 }
 
 private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
                                crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+                               pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]],
                                http: HttpExt,
                                materializer: Materializer,
                                urlRequestTimeout: Timeout,
@@ -72,7 +75,7 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
           case Failure(throwable) => FutureFailure(throwable)
         })
 
-        receiveHttpResponse(url)
+        receiveHttpResponse(url, null)
 
       case HostQueue.Unavailable | AskFailure =>
         requestNextUrl()
@@ -87,9 +90,10 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
     })
   }
 
-  private def receiveHttpResponse(url: String): Behavior[CombinedCommand] = Behaviors.receiveMessage({
+  private def receiveHttpResponse(url: String, response: HttpResponse): Behavior[CombinedCommand] = Behaviors.receiveMessage({
     case FutureSuccess(response: HttpResponse) => //The response entity must be consumed!
-      context.log.info(response.status.toString) //TODO: Handle status codes and content types.
+      context.log.info("Received {} for {}", response.status.toString, url)
+      //TODO: Handle status codes and content types.
 //      response.entity.contentType == ContentTypes.`text/html(UTF-8)`
 
       //Receive the response body:
@@ -102,15 +106,23 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
         case Failure(throwable) => FutureFailure(throwable)
       })
 
-      Behaviors.same
+      receiveHttpResponse(url, response)
 
     case FutureSuccess(responseBody: ByteString) =>
-      context.log.info("Received {} bytes for {}", responseBody.length, url)
+      context.log.info("Received {} bytes ({}) for {}", responseBody.length, response.entity.contentType, url)
+      
+      //Send the response data to the CrawlDepthLimiter and the Page:
       crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(url, responseBody)
+      pageShardRegion ! ShardingEnvelope(url, Page.FetchSuccess(response, responseBody))
+      
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>
       context.log.error("Error while fetching {}", url, throwable)
+      
+      //Notify the Page:
+      pageShardRegion ! ShardingEnvelope(url, Page.FetchFailure)
+      
       buffer.unstashAll(requestNextUrl())
 
     case Stop =>

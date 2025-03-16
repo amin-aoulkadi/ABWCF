@@ -10,5 +10,5 @@ import org.apache.pekko.actor.typed.scaladsl.{GroupRouter, Routers}
  * This actor is stateless.
  */
 object HostQueueRouter {
-  def apply(): GroupRouter[HostQueue.Command] = Routers.group(HostQueue.HostQueueServiceKey).withRandomRouting()
+  def apply(): GroupRouter[HostQueue.Command] = Routers.group(HostQueue.HQServiceKey).withRandomRouting()
 }
