@@ -1,10 +1,12 @@
 package abwcf.actors
 
+import abwcf.FetchResponse
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
-import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, Uri}
+import org.apache.pekko.http.scaladsl.model.*
+import org.apache.pekko.http.scaladsl.model.headers.Location
 import org.apache.pekko.http.scaladsl.{Http, HttpExt}
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.util.{ByteString, Timeout}
@@ -21,6 +23,11 @@ import scala.util.{Failure, Success}
  * This actor is stateful.
  */
 object Fetcher {
+  /**
+   * Media types that can be parsed by the [[HtmlParser]] actor.
+   */
+  private val ParseableMediaTypes = List(MediaTypes.`text/html`, MediaTypes.`application/xhtml+xml`)
+
   sealed trait Command
   case object Stop extends Command
   private case object AskFailure extends Command
@@ -29,24 +36,28 @@ object Fetcher {
 
   private type CombinedCommand = Command | HostQueue.Reply
 
-  def apply(hostQueueRouter: ActorRef[HostQueue.Command], crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
-    Behaviors.withStash(5)(buffer => {
-      val http = Http(context.system.toClassic)
-      val materializer = Materializer(context)
-      val pageShardRegion = Page.getShardRegion(context.system)
+  def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+            hostQueueRouter: ActorRef[HostQueue.Command],
+            urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] =
+    Behaviors.setup[CombinedCommand](context => {
+      Behaviors.withStash(5)(buffer => {
+        val http = Http(context.system.toClassic)
+        val materializer = Materializer(context)
+        val pageShardRegion = Page.getShardRegion(context.system)
 
-      //TODO: Add these to config:
-      val urlRequestTimeout = 3 seconds
-      val bytesPerSec = 1_000_000 //Don't make this value too small.
+        //TODO: Add these to config:
+        val urlRequestTimeout = 3 seconds
+        val bytesPerSec = 1_000_000 //Don't make this value too small.
 
-      new Fetcher(hostQueueRouter, crawlDepthLimiter, pageShardRegion, http, materializer, urlRequestTimeout, bytesPerSec, context, buffer).requestNextUrl()
-    })
-  }).narrow
+        new Fetcher(crawlDepthLimiter, hostQueueRouter, pageShardRegion, urlNormalizer, http, materializer, urlRequestTimeout, bytesPerSec, context, buffer).requestNextUrl()
+      })
+    }).narrow
 }
 
-private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
-                               crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+                               hostQueueRouter: ActorRef[HostQueue.Command],
                                pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]],
+                               urlNormalizer: ActorRef[UrlNormalizer.Command],
                                http: HttpExt,
                                materializer: Materializer,
                                urlRequestTimeout: Timeout,
@@ -68,7 +79,7 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
         context.log.info("Fetching {}", url)
 
         //Send the HTTP request:
-        val responseFuture = http.singleRequest(HttpRequest(uri = Uri(url)))
+        val responseFuture = http.singleRequest(HttpRequest(uri = Uri(url))) //TODO: Set Accept header (e.g. "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")?
 
         context.pipeToSelf(responseFuture)({
           case Success(response) => FutureSuccess(response)
@@ -91,13 +102,36 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
   }
 
   private def receiveHttpResponse(url: String, response: HttpResponse): Behavior[CombinedCommand] = Behaviors.receiveMessage({
-    case FutureSuccess(response: HttpResponse) => //The response entity must be consumed!
+    //Handle 4xx and 5xx error responses:
+    case FutureSuccess(response: HttpResponse) if response.status.isFailure =>
       context.log.info("Received {} for {}", response.status.toString, url)
-      //TODO: Handle status codes and content types.
-//      response.entity.contentType == ContentTypes.`text/html(UTF-8)`
 
-      //Receive the response body:
-      val byteFuture = response.entity.dataBytes
+      //Discard the response entity and notify the Page:
+      response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
+      pageShardRegion ! ShardingEnvelope(url, Page.FetchError(response.status))
+
+      buffer.unstashAll(requestNextUrl())
+
+    //Handle 3xx redirection responses:
+    case FutureSuccess(response: HttpResponse) if response.status.isRedirection =>
+      context.log.info("Received {} for {}", response.status.toString, url)
+
+      //Discard the response entity, notify the Page and send the redirect URL to the UrlNormalizer:
+      response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
+      val redirectTo = getRedirectUrl(response, url)
+      pageShardRegion ! ShardingEnvelope(url, Page.FetchRedirect(response.status, redirectTo))
+      redirectTo.foreach(urlNormalizer ! UrlNormalizer.Normalize(_)) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
+
+      buffer.unstashAll(requestNextUrl())
+
+    //Handle other HTTP responses:
+    case FutureSuccess(response: HttpResponse) =>
+      context.log.info("Received {} for {}", response.status.toString, url)
+      //TODO: What about responses that are not 200 OK?
+      //TODO: Check if response.encoding needs to be handled (https://pekko.apache.org/docs/pekko-http/current/common/encoding.html#client-side).
+
+      //Consume the response entity to receive the response body:
+      val byteFuture = response.entity.dataBytes //Response entities must be consumed or discarded.
         .throttle(bytesPerSec, 1 second, bytes => bytes.length) //Throttles the stream and the download. The effect on network usage probably also depends on other factors (e.g. drivers) and is more noticeable during long downloads (e.g. 10 MB at 100 kB/s).
         .runReduce(_ ++ _)(using materializer)
 
@@ -108,21 +142,22 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
 
       receiveHttpResponse(url, response)
 
+    //Send the complete response downstream after the response body has been received:
     case FutureSuccess(responseBody: ByteString) =>
       context.log.info("Received {} bytes ({}) for {}", responseBody.length, response.entity.contentType, url)
-      
-      //Send the response data to the CrawlDepthLimiter and the Page:
-      crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(url, responseBody)
-      pageShardRegion ! ShardingEnvelope(url, Page.FetchSuccess(response, responseBody))
-      
+
+      if (ParseableMediaTypes.contains(response.entity.contentType.mediaType)) { //Possible alternative: Use mediaType.binary or mediaType.isText.
+        crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(url, responseBody)
+      }
+
+      pageShardRegion ! ShardingEnvelope(url, Page.FetchSuccess(new FetchResponse(response, responseBody)))
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>
       context.log.error("Error while fetching {}", url, throwable)
       
       //Notify the Page:
-      pageShardRegion ! ShardingEnvelope(url, Page.FetchFailure)
-      
+      pageShardRegion ! ShardingEnvelope(url, Page.FetchException)
       buffer.unstashAll(requestNextUrl())
 
     case Stop =>
@@ -133,4 +168,31 @@ private class Fetcher private (hostQueueRouter: ActorRef[HostQueue.Command],
       context.log.info("Skipping unexpected message {}", other)
       Behaviors.same
   })
+
+  /**
+   * Returns the redirection URL from the `Location` response header.
+   *
+   * @param response the response from the server
+   * @param url the URL of the original request
+   *
+   * @see
+   *      - [[https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Location MDN: Location]]
+   *      - [[https://datatracker.ietf.org/doc/html/rfc9110 RFC 9110 - HTTP Semantics]] (section ''10.2.2. Location'')
+   */
+  private def getRedirectUrl(response: HttpResponse, url: String): Option[String] = {
+    val locationHeaders = response.headers[Location]
+
+    if (locationHeaders.nonEmpty) {
+      var redirectUri = locationHeaders.head.uri
+
+      if (redirectUri.isRelative) {
+        val originalUri = Uri(url)
+        redirectUri = redirectUri.resolvedAgainst(originalUri).withFragment(originalUri.fragment.orNull)
+      }
+
+      Some(redirectUri.toString)
+    } else {
+      None
+    }
+  }
 }

@@ -23,18 +23,22 @@ object FetcherManager {
 
   private type CombinedCommand = Command | ShardRegion.ClusterShardingStats
 
-  def apply(hostQueueRouter: ActorRef[HostQueue.Command], crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
-    Behaviors.withTimers(timers => {
-      //Periodically check the number of available HostQueues:
-      timers.startTimerWithFixedDelay(CheckHostQueues, 5 seconds, 10 seconds) //TODO: Add to config.
+  def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+            hostQueueRouter: ActorRef[HostQueue.Command],
+            urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] =
+    Behaviors.setup[CombinedCommand](context => {
+      Behaviors.withTimers(timers => {
+        //Periodically check the number of available HostQueues:
+        timers.startTimerWithFixedDelay(CheckHostQueues, 5 seconds, 10 seconds) //TODO: Add to config.
 
-      new FetcherManager(hostQueueRouter, crawlDepthLimiter, context).fetcherManager(List.empty)
-    })
-  }).narrow
+        new FetcherManager(crawlDepthLimiter, hostQueueRouter, urlNormalizer, context).fetcherManager(List.empty)
+      })
+    }).narrow
 }
 
-private class FetcherManager private (hostQueueRouter: ActorRef[HostQueue.Command],
-                                      crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+                                      hostQueueRouter: ActorRef[HostQueue.Command],
+                                      urlNormalizer: ActorRef[UrlNormalizer.Command],
                                       context: ActorContext[FetcherManager.CombinedCommand]) {
   import FetcherManager.*
 
@@ -57,7 +61,7 @@ private class FetcherManager private (hostQueueRouter: ActorRef[HostQueue.Comman
       //Spawn more Fetchers if needed:
       while scaledFetchers.length < target do {
         val fetcher = context.spawnAnonymous( //TODO: Dedicated thread pool for async fetching? → https://pekko.apache.org/docs/pekko/current/index-network.html
-          Behaviors.supervise(Fetcher(hostQueueRouter, crawlDepthLimiter))
+          Behaviors.supervise(Fetcher(crawlDepthLimiter, hostQueueRouter, urlNormalizer))
             .onFailure(SupervisorStrategy.restart.withLoggingEnabled(true))
         )
         

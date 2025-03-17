@@ -1,13 +1,13 @@
 package abwcf.actors
 
+import abwcf.FetchResponse
 import abwcf.actors.Page.Status.{Discovered, Undefined}
 import org.apache.pekko.actor.typed.receptionist.Receptionist
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer, TimerScheduler}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior, receptionist}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
-import org.apache.pekko.http.scaladsl.model.HttpResponse
-import org.apache.pekko.util.ByteString
+import org.apache.pekko.http.scaladsl.model.StatusCode
 
 import java.net.URI
 import scala.concurrent.duration.DurationInt
@@ -30,8 +30,10 @@ object Page {
   
   sealed trait Command
   case object Discover extends Command
-  case class FetchSuccess(response: HttpResponse, responseBody: ByteString) extends Command //TODO: Probably better to use a custom class instead of HttpResponse.
-  case object FetchFailure extends Command
+  case class FetchSuccess(response: FetchResponse) extends Command
+  case class FetchRedirect(statusCode: StatusCode, redirectTo: Option[String]) extends Command
+  case class FetchError(statusCode: StatusCode) extends Command
+  case object FetchException extends Command
   private case object RetrySetup extends Command
 
   private type CombinedCommand = Command | Receptionist.Listing
@@ -67,7 +69,7 @@ private class Page private (url: String,
         actors.find(_.path.address.hasLocalScope) match {
           case Some(userCodeRunner) =>
             buffer.unstashAll(page(Undefined, userCodeRunner))
-            
+
           case None =>
             //Try again later:
             if (context.system.uptime < 60) {
@@ -77,7 +79,7 @@ private class Page private (url: String,
               context.log.error("Failed to find a local UserCodeRunner")
               timers.startSingleTimer(RetrySetup, 30 seconds)
             }
-            
+
             Behaviors.same
         }
 
@@ -100,12 +102,20 @@ private class Page private (url: String,
     case Discover => //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
       Behaviors.same
 
-    case FetchSuccess(response, responseBody) =>
+    case FetchSuccess(response) =>
       //TODO: Page status and behavior should change once it has been fetched.
-      userCodeRunner ! UserCodeRunner.ProcessPage(url, response, responseBody)
+      userCodeRunner ! UserCodeRunner.ProcessPage(url, response)
       Behaviors.same
 
-    case FetchFailure =>
+    case FetchRedirect(statusCode, redirectTo) =>
+      //TODO: Page status and behavior should change once it has been fetched.
+      Behaviors.same
+
+    case FetchError(statusCode) =>
+      //TODO: Page status and behavior should change once it has been fetched.
+      Behaviors.same
+
+    case FetchException =>
       //TODO: Handle fetch failure.
       Behaviors.same
 
