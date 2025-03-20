@@ -25,19 +25,21 @@ object FetcherManager {
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
+            pageManager: ActorRef[PageManager.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] =
     Behaviors.setup[CombinedCommand](context => {
       Behaviors.withTimers(timers => {
         //Periodically check the number of available HostQueues:
         timers.startTimerWithFixedDelay(CheckHostQueues, 5 seconds, 10 seconds) //TODO: Add to config.
 
-        new FetcherManager(crawlDepthLimiter, hostQueueRouter, urlNormalizer, context).fetcherManager(List.empty)
+        new FetcherManager(crawlDepthLimiter, hostQueueRouter, pageManager, urlNormalizer, context).fetcherManager(List.empty)
       })
     }).narrow
 }
 
 private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
                                       hostQueueRouter: ActorRef[HostQueue.Command],
+                                      pageManager: ActorRef[PageManager.Command],
                                       urlNormalizer: ActorRef[UrlNormalizer.Command],
                                       context: ActorContext[FetcherManager.CombinedCommand]) {
   import FetcherManager.*
@@ -60,8 +62,8 @@ private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimi
 
       //Spawn more Fetchers if needed:
       while scaledFetchers.length < target do {
-        val fetcher = context.spawnAnonymous( //TODO: Dedicated thread pool for async fetching? → https://pekko.apache.org/docs/pekko/current/index-network.html
-          Behaviors.supervise(Fetcher(crawlDepthLimiter, hostQueueRouter, urlNormalizer))
+        val fetcher = context.spawnAnonymous(
+          Behaviors.supervise(Fetcher(crawlDepthLimiter, hostQueueRouter, pageManager, urlNormalizer))
             .onFailure(SupervisorStrategy.restart.withLoggingEnabled(true))
         )
         

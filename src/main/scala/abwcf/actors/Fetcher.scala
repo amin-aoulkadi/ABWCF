@@ -4,7 +4,6 @@ import abwcf.FetchResponse
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.model.headers.Location
 import org.apache.pekko.http.scaladsl.{Http, HttpExt}
@@ -38,25 +37,25 @@ object Fetcher {
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
+            pageManager: ActorRef[PageManager.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] =
     Behaviors.setup[CombinedCommand](context => {
       Behaviors.withStash(5)(buffer => {
         val http = Http(context.system.toClassic)
         val materializer = Materializer(context)
-        val pageShardRegion = Page.getShardRegion(context.system)
 
         //TODO: Add these to config:
         val urlRequestTimeout = 3 seconds
         val bytesPerSec = 1_000_000 //Don't make this value too small.
 
-        new Fetcher(crawlDepthLimiter, hostQueueRouter, pageShardRegion, urlNormalizer, http, materializer, urlRequestTimeout, bytesPerSec, context, buffer).requestNextUrl()
+        new Fetcher(crawlDepthLimiter, hostQueueRouter, pageManager, urlNormalizer, http, materializer, urlRequestTimeout, bytesPerSec, context, buffer).requestNextUrl()
       })
     }).narrow
 }
 
 private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
                                hostQueueRouter: ActorRef[HostQueue.Command],
-                               pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]],
+                               pageManager: ActorRef[PageManager.Command],
                                urlNormalizer: ActorRef[UrlNormalizer.Command],
                                http: HttpExt,
                                materializer: Materializer,
@@ -108,7 +107,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
       //Discard the response entity and notify the Page:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
-      pageShardRegion ! ShardingEnvelope(url, Page.FetchError(response.status))
+      pageManager ! PageManager.FetchError(url, response.status)
 
       buffer.unstashAll(requestNextUrl())
 
@@ -119,7 +118,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       //Discard the response entity, notify the Page and send the redirect URL to the UrlNormalizer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = getRedirectUrl(response, url)
-      pageShardRegion ! ShardingEnvelope(url, Page.FetchRedirect(response.status, redirectTo))
+      pageManager ! PageManager.FetchRedirect(url, response.status, redirectTo)
       redirectTo.foreach(urlNormalizer ! UrlNormalizer.Normalize(_)) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
 
       buffer.unstashAll(requestNextUrl())
@@ -150,14 +149,11 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
         crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(url, responseBody)
       }
 
-      pageShardRegion ! ShardingEnvelope(url, Page.FetchSuccess(new FetchResponse(response, responseBody)))
+      pageManager ! PageManager.FetchSuccess(url, new FetchResponse(response, responseBody))
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>
       context.log.error("Error while fetching {}", url, throwable)
-      
-      //Notify the Page:
-      pageShardRegion ! ShardingEnvelope(url, Page.FetchException)
       buffer.unstashAll(requestNextUrl())
 
     case Stop =>

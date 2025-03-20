@@ -1,30 +1,42 @@
 package abwcf.actors
 
 import abwcf.FetchResponse
-import org.apache.pekko.actor.typed.Behavior
-import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
+import org.apache.pekko.http.scaladsl.model.StatusCode
 
 /**
  * Executes user-defined code to process crawled pages.
  *
  * There should be one [[UserCodeRunner]] actor per node.
  *
- * This actor is stateless and registered with the receptionist.
+ * This actor is stateless.
  */
 object UserCodeRunner {
-  val UCRServiceKey: ServiceKey[Command] = ServiceKey("UserCodeRunner")
-
   sealed trait Command
-  case class ProcessPage(url: String, response: FetchResponse) extends Command
+  case class ProcessSuccess(url: String, response: FetchResponse) extends Command
+  case class ProcessRedirect(url: String, statusCode: StatusCode, redirectTo: Option[String]) extends Command
+  case class ProcessError(url: String, statusCode: StatusCode) extends Command
 
   def apply(): Behavior[Command] = Behaviors.setup(context => {
-    context.system.receptionist ! Receptionist.Register(UCRServiceKey, context.self)
+    val pageShardRegion = Page.getShardRegion(context.system)
 
     Behaviors.receiveMessage({
-      case ProcessPage(url, response) =>
+      case ProcessSuccess(url, response) =>
         //TODO: Provide an API to inject user-defined code.
-        context.log.info("Processing {} ({}, {} bytes)", url, response.status, response.body.length)
+        context.log.info("Processing page {} ({}, {} bytes)", url, response.status, response.body.length)
+        pageShardRegion ! ShardingEnvelope(url, Page.Success) //Tell the Page that it has been processed.
+        Behaviors.same
+
+      case ProcessRedirect(url, statusCode, redirectTo) =>
+        context.log.info("Processing redirect from {} ({}, redirection to {})", url, statusCode, redirectTo)
+        pageShardRegion ! ShardingEnvelope(url, Page.Redirect) //Tell the Page that it has been processed.
+        Behaviors.same
+
+      case ProcessError(url, statusCode) =>
+        context.log.info("Processing error from {} ({})", url, statusCode)
+        pageShardRegion ! ShardingEnvelope(url, Page.Error)
         Behaviors.same
     })
   })

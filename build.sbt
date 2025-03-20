@@ -16,7 +16,8 @@ libraryDependencies ++= Seq(
   "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
   "org.apache.pekko" %% "pekko-cluster-typed" % pekkoVersion,
   "org.apache.pekko" %% "pekko-cluster-sharding-typed" % pekkoVersion,
-  "org.apache.pekko" %% "pekko-stream" % pekkoVersion,
+  "org.apache.pekko" %% "pekko-persistence-typed" % pekkoVersion,
+  "org.apache.pekko" %% "pekko-stream" % pekkoVersion, //Required by Pekko HTTP.
   "org.apache.pekko" %% "pekko-http" % pekkoHttpVersion,
   "org.jsoup" % "jsoup" % jsoupVersion,
   "org.scalatest" %% "scalatest" % scalaTestVersion % Test
