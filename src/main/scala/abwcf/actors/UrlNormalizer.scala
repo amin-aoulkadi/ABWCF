@@ -21,7 +21,7 @@ import java.util.Locale
  */
 object UrlNormalizer {
   sealed trait Command
-  case class Normalize(url: String) extends Command
+  case class Normalize(url: String, crawlDepth: Int) extends Command
 
   @throws[URISyntaxException]
   def apply(urlFilter: ActorRef[UrlFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
@@ -31,7 +31,7 @@ object UrlNormalizer {
     val removeFragment = config.getBoolean("abwcf.url-normalizer.remove-fragment")
 
     Behaviors.receiveMessage({
-      case Normalize(urlString) =>
+      case Normalize(urlString, crawlDepth) =>
         //Normalize and remove URL components as configured:
         val uri = URI(urlString).normalize()
         val scheme = uri.getScheme.toLowerCase(Locale.ROOT)
@@ -51,7 +51,7 @@ object UrlNormalizer {
         if query != null then builder += '?' ++= query
         if fragment != null then builder += '#' ++= fragment
 
-        urlFilter ! UrlFilter.Filter(builder.toString)
+        urlFilter ! UrlFilter.Filter(builder.toString, crawlDepth)
         Behaviors.same
     })
   })

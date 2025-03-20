@@ -13,12 +13,19 @@ import org.apache.pekko.util.ByteString
  */
 object CrawlDepthLimiter {
   sealed trait Command
-  case class CheckDepth(url: String, responseBody: ByteString) extends Command
+  case class CheckDepth(url: String, crawlDepth: Int, responseBody: ByteString) extends Command
 
-  def apply(htmlParser: ActorRef[HtmlParser.Command]): Behavior[Command] = Behaviors.receiveMessage({
-    case CheckDepth(url, responseBody) =>
-      //TODO: Implement crawl depth limiting.
-      htmlParser ! HtmlParser.Parse(url, responseBody)
-      Behaviors.same
+  def apply(htmlParser: ActorRef[HtmlParser.Command]): Behavior[Command] = Behaviors.setup(context => {
+    val config = context.system.settings.config
+    val maxCrawlDepth = config.getInt("abwcf.crawl-depth-limiter.max-crawl-depth")
+
+    Behaviors.receiveMessage({
+      case CheckDepth(url, crawlDepth, responseBody) =>
+        if (crawlDepth < maxCrawlDepth) {
+          htmlParser ! HtmlParser.Parse(url, crawlDepth, responseBody)
+        }
+
+        Behaviors.same
+    })
   })
 }

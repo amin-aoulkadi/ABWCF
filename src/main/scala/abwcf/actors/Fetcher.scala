@@ -74,7 +74,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
     //Handle the reply from the HostQueue:
     Behaviors.receiveMessage({
-      case HostQueue.Head(url) =>
+      case HostQueue.Head(url, crawlDepth) =>
         context.log.info("Fetching {}", url)
 
         //Send the HTTP request:
@@ -85,7 +85,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
           case Failure(throwable) => FutureFailure(throwable)
         })
 
-        receiveHttpResponse(url, null)
+        receiveHttpResponse(url, crawlDepth, null)
 
       case HostQueue.Unavailable | AskFailure =>
         requestNextUrl()
@@ -100,7 +100,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     })
   }
 
-  private def receiveHttpResponse(url: String, response: HttpResponse): Behavior[CombinedCommand] = Behaviors.receiveMessage({
+  private def receiveHttpResponse(url: String, crawlDepth: Int, response: HttpResponse): Behavior[CombinedCommand] = Behaviors.receiveMessage({
     //Handle 4xx and 5xx error responses:
     case FutureSuccess(response: HttpResponse) if response.status.isFailure =>
       context.log.info("Received {} for {}", response.status.toString, url)
@@ -119,7 +119,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = getRedirectUrl(response, url)
       pageManager ! PageManager.FetchRedirect(url, response.status, redirectTo)
-      redirectTo.foreach(urlNormalizer ! UrlNormalizer.Normalize(_)) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
+      redirectTo.foreach(urlNormalizer ! UrlNormalizer.Normalize(_, crawlDepth)) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
 
       buffer.unstashAll(requestNextUrl())
 
@@ -139,14 +139,14 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
         case Failure(throwable) => FutureFailure(throwable)
       })
 
-      receiveHttpResponse(url, response)
+      receiveHttpResponse(url, crawlDepth, response)
 
     //Send the complete response downstream after the response body has been received:
     case FutureSuccess(responseBody: ByteString) =>
       context.log.info("Received {} bytes ({}) for {}", responseBody.length, response.entity.contentType, url)
 
       if (ParseableMediaTypes.contains(response.entity.contentType.mediaType)) { //Possible alternative: Use mediaType.binary or mediaType.isText.
-        crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(url, responseBody)
+        crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(url, crawlDepth, responseBody)
       }
 
       pageManager ! PageManager.FetchSuccess(url, new FetchResponse(response, responseBody))

@@ -65,7 +65,7 @@ object Crawler {
     
     Behaviors.receiveMessage({
       case SeedUrls(urls) =>
-        urls.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(url))
+        urls.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(url, 0))
         Behaviors.same
     })
   })

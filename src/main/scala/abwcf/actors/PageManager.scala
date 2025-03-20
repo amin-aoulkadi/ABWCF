@@ -6,6 +6,8 @@ import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.http.scaladsl.model.StatusCode
 
+import java.net.URI
+
 /**
  * Orchestrates certain interactions with [[Page]] actors.
  *
@@ -13,19 +15,20 @@ import org.apache.pekko.http.scaladsl.model.StatusCode
  *
  * This actor is stateless.
  */
-object PageManager {
+object PageManager { //TODO: There's not a lot of management here. Maybe rename to PageCoordinator or PageOrchestrator.
   sealed trait Command
-  case class Spawn(url: String) extends Command
+  case class Discover(url: String, crawlDepth: Int) extends Command //TODO: Rename to Discover.
   case class FetchSuccess(url: String, response: FetchResponse) extends Command
   case class FetchRedirect(url: String, statusCode: StatusCode, redirectTo: Option[String]) extends Command
   case class FetchError(url: String, statusCode: StatusCode) extends Command
 
   def apply(userCodeRunner: ActorRef[UserCodeRunner.Command]): Behavior[Command] = Behaviors.setup(context => {
+    val hostQueueShardRegion = HostQueue.getShardRegion(context.system)
     val pageShardRegion = Page.getShardRegion(context.system)
 
     Behaviors.receiveMessage({
-      case Spawn(url) => //TODO: Add database lookup (with a small cache).
-        pageShardRegion ! ShardingEnvelope(url, Page.Discover(url, 0)) //TODO: Implement crawl depth.
+      case Discover(url, crawlDepth) => //TODO: Add database lookup (with a small cache).
+        pageShardRegion ! ShardingEnvelope(url, Page.Discover(url, crawlDepth))
         Behaviors.same
 
       case FetchSuccess(url, response) =>

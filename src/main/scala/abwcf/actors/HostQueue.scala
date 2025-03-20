@@ -23,11 +23,11 @@ object HostQueue { //TODO: Handle (automatic) passivation and handle HostQueues 
   val HQServiceKey: ServiceKey[Command] = ServiceKey("HostQueue")
 
   sealed trait Command
-  case class Enqueue(url: String) extends Command
+  case class Enqueue(url: String, crawlDepth: Int) extends Command
   case class GetHead(replyTo: ActorRef[Reply]) extends Command
 
   sealed trait Reply
-  case class Head(url: String) extends Reply
+  case class Head(url: String, crawlDepth: Int) extends Reply
   case object Unavailable extends Reply
 
   def apply(): Behavior[Command] = Behaviors.setup(context => {
@@ -47,13 +47,13 @@ object HostQueue { //TODO: Handle (automatic) passivation and handle HostQueues 
 private class HostQueue private (crawlDelay: Duration) {
   import HostQueue.*
 
-  private def hostQueue(urls: Queue[String], crawlDelayEnd: Instant): Behavior[Command] = Behaviors.receiveMessage({
-    case Enqueue(url) =>
-      hostQueue(urls.enqueue(url), crawlDelayEnd)
+  private def hostQueue(urls: Queue[(String, Int)], crawlDelayEnd: Instant): Behavior[Command] = Behaviors.receiveMessage({
+    case Enqueue(url, crawlDepth) =>
+      hostQueue(urls.enqueue((url, crawlDepth)), crawlDelayEnd)
 
     case GetHead(replyTo) if urls.nonEmpty && Instant.now.isAfter(crawlDelayEnd) =>
       val (head, tail) = urls.dequeue
-      replyTo ! Head(head)
+      replyTo ! Head(head._1, head._2)
   
       if (tail.isEmpty) {
         Behaviors.stopped //TODO: What about messages that are already in or in flight to the inbox of this actor?

@@ -36,9 +36,14 @@ object Page {
     def applyEvent(event: Event): State //Only updates the state and must not have side effects.
   }
 
-  case object UnknownPage extends State {
+  case class UnknownPage(hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]]) extends State { //This state is never persisted, so the ActorRef shouldn't be a problem here.
     override def applyCommand(command: Command): Effect[Event, State] = command match {
-      case Discover(url, crawlDepth) => Effect.persist(Discovered(url, crawlDepth))
+      case Discover(url, crawlDepth) =>
+        //Add the page to a HostQueue so that it can be fetched:
+        val host = URI(url).getHost
+        hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(url, crawlDepth))
+        Effect.persist(Discovered(url, crawlDepth))
+      
       case _ => Effect.unhandled
     }
 
@@ -75,15 +80,15 @@ object Page {
 
     EventSourcedBehavior[Command, Event, State](
       PersistenceId(TypeKey.name, url),
-      emptyState = UnknownPage,
+      emptyState = UnknownPage(hostQueueShardRegion),
       commandHandler = (state, command) => state.applyCommand(command),
       eventHandler = (state, event) => state.applyEvent(event)
     )
       .receiveSignal({
-        case (state, RecoveryCompleted) if state != ProcessedPage => //RecoveryCompleted is sent to both recovered actors and newly created actors.
+        case (DiscoveredPage(url, crawlDepth), RecoveryCompleted) => //RecoveryCompleted is sent to both recovered actors and newly created actors. However, there is no way of knowing the crawl depth in the UnknownPage state, so HostQueue communication needs to be handled by the UnknownPage's command handler.
           //Add the page to a HostQueue so that it can be fetched:
           val host = URI(url).getHost
-          hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(url))
+          hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(url, crawlDepth))
       })
   })
 

@@ -16,10 +16,10 @@ import scala.jdk.StreamConverters.StreamHasToScala
  */
 object HtmlParser {
   sealed trait Command
-  case class Parse(url: String, responseBody: ByteString) extends Command
+  case class Parse(url: String, crawlDepth: Int, responseBody: ByteString) extends Command
 
   def apply(urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] = Behaviors.receiveMessage({
-    case Parse(url, responseBody) =>
+    case Parse(url, crawlDepth, responseBody) =>
       val urls: List[String] = Jsoup.parse(responseBody.utf8String, url)
         .select("a[href]") //Select all <a> elements that have an href attribute.
         .stream()
@@ -28,7 +28,8 @@ object HtmlParser {
         .filter(_.startsWith("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
         .toScala(List)
 
-      urls.foreach(urlNormalizer ! UrlNormalizer.Normalize(_)) //TODO: Maybe debounce discovered URLs to eliminate duplicates across multiple responses (e.g. via a custom mailbox for the downstream actor)?
+      urls.foreach(urlNormalizer ! UrlNormalizer.Normalize(_, crawlDepth + 1)) //Important: The crawl depth increases here.
+      //TODO: Maybe debounce discovered URLs to eliminate duplicates across multiple responses (e.g. via a custom mailbox for the downstream actor)?
       Behaviors.same
   })
 }

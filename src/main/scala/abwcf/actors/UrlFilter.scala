@@ -17,7 +17,7 @@ import scala.util.matching.Regex
  */
 object UrlFilter {
   sealed trait Command
-  case class Filter(url: String) extends Command
+  case class Filter(url: String, crawlDepth: Int) extends Command
 
   def apply(pageManager: ActorRef[PageManager.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
@@ -31,12 +31,12 @@ object UrlFilter {
       .map(Regex(_))
 
     Behaviors.receiveMessage({
-      case Filter(url) =>
+      case Filter(url, crawlDepth) =>
         val existsRequiredMatch = mustMatch.exists(_.matches(url))
         val existsForbiddenMatch = mustNotMatch.exists(_.matches(url))
 
         if (existsRequiredMatch && !existsForbiddenMatch) {
-          pageManager ! PageManager.Spawn(url)
+          pageManager ! PageManager.Discover(url, crawlDepth)
         }
         
         Behaviors.same
