@@ -27,68 +27,72 @@ object Page {
   case object Redirect extends Command
   case object Error extends Command
 
-  sealed trait Event
-  case class Discovered(url: String, crawlDepth: Int) extends Event
-  case object Processed extends Event
-
-  sealed trait State {
-    def applyCommand(command: Command): Effect[Event, State]
-    def applyEvent(event: Event): State //Only updates the state and must not have side effects.
-  }
-
-  case class UnknownPage(hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]]) extends State { //This state is never persisted, so the ActorRef shouldn't be a problem here.
-    override def applyCommand(command: Command): Effect[Event, State] = command match {
-      case Discover(url, crawlDepth) =>
-        //Add the page to a HostQueue so that it can be fetched:
-        val host = URI(url).getHost
-        hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(url, crawlDepth))
-        Effect.persist(Discovered(url, crawlDepth))
-      
-      case _ => Effect.unhandled
-    }
-
-    override def applyEvent(event: Event): State = event match {
-      case Discovered(url, crawlDepth) => DiscoveredPage(url, crawlDepth)
-      case _ => throw new IllegalStateException(s"Unexpected event $event in state $this")
-    }
-  }
-
-  case class DiscoveredPage(url: String, crawlDepth: Int) extends State {
-    override def applyCommand(command: Command): Effect[Event, State] = command match {
-      case Discover(_, _) => Effect.none //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
-      case Success | Redirect | Error => Effect.persist(Processed)
-    }
-
-    override def applyEvent(event: Event): State = event match {
-      case Processed => ProcessedPage
-      case _ => throw new IllegalStateException(s"Unexpected event $event in state $this")
-    }
-  }
-
-  case object ProcessedPage extends State{
-    override def applyCommand(command: Command): Effect[Event, State] = {
-      Effect.none
-    }
-
-    override def applyEvent(event: Event): State = {
-      throw new IllegalStateException(s"Unexpected event $event in state $this")
-    }
-  }
+  private trait Event
+  private case class Discovered(url: String, crawlDepth: Int) extends Event
+  private case object Processed extends Event
 
   def apply(url: String): Behavior[Command] = Behaviors.setup(context => {
     val hostQueueShardRegion = HostQueue.getShardRegion(context.system)
 
+    /**
+     * Adds the URL to a HostQueue so that it can be fetched.
+     */
+    def addToHostQueue(url: String, crawlDepth: Int): Unit = {
+      val host = URI(url).getHost
+      hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(url, crawlDepth))
+    }
+
+    sealed trait State {
+      def applyCommand(command: Command): Effect[Event, State]
+      def applyEvent(event: Event): State //Only updates the state and must not have side effects.
+    }
+
+    case object UnknownPage extends State {
+      override def applyCommand(command: Command): Effect[Event, State] = command match {
+        case Discover(url, crawlDepth) =>
+          Effect.persist(Discovered(url, crawlDepth))
+            .thenRun(_ => addToHostQueue(url, crawlDepth))
+
+        case _ => Effect.unhandled
+      }
+
+      override def applyEvent(event: Event): State = event match {
+        case Discovered(url, crawlDepth) => DiscoveredPage(url, crawlDepth)
+        case _ => throw new IllegalStateException(s"Unexpected event $event in state $this")
+      }
+    }
+
+    case class DiscoveredPage(url: String, crawlDepth: Int) extends State {
+      override def applyCommand(command: Command): Effect[Event, State] = command match {
+        case Discover(_, _) => Effect.none //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
+        case Success | Redirect | Error => Effect.persist(Processed)
+      }
+
+      override def applyEvent(event: Event): State = event match {
+        case Processed => ProcessedPage
+        case _ => throw new IllegalStateException(s"Unexpected event $event in state $this")
+      }
+    }
+
+    case object ProcessedPage extends State{
+      override def applyCommand(command: Command): Effect[Event, State] = {
+        Effect.none
+      }
+
+      override def applyEvent(event: Event): State = {
+        throw new IllegalStateException(s"Unexpected event $event in state $this")
+      }
+    }
+
     EventSourcedBehavior[Command, Event, State](
       PersistenceId(TypeKey.name, url),
-      emptyState = UnknownPage(hostQueueShardRegion),
+      emptyState = UnknownPage,
       commandHandler = (state, command) => state.applyCommand(command),
       eventHandler = (state, event) => state.applyEvent(event)
     )
       .receiveSignal({
-        case (DiscoveredPage(url, crawlDepth), RecoveryCompleted) => //RecoveryCompleted is sent to both recovered actors and newly created actors. However, there is no way of knowing the crawl depth in the UnknownPage state, so HostQueue communication needs to be handled by the UnknownPage's command handler.
-          //Add the page to a HostQueue so that it can be fetched:
-          val host = URI(url).getHost
-          hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(url, crawlDepth))
+        //RecoveryCompleted is sent to both recovered actors and newly created actors. However, there is no way of getting the crawl depth from the UnknownPage state, so HostQueue communication needs to be handled by the command handler of the UnknownPage state. This is acceptable because the UnknownPage state is never persisted.
+        case (DiscoveredPage(url, crawlDepth), RecoveryCompleted) => addToHostQueue(url, crawlDepth)
       })
   })
 
