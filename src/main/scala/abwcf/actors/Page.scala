@@ -18,6 +18,8 @@ import scala.jdk.DurationConverters.*
  * This actor is stateful, sharded, gracefully passivated and event sourced.
  *
  * Entity ID: URL of the page.
+ * 
+ * This entity will be remembered if remembering entities is configured.
  */
 object Page {
   val TypeKey: EntityTypeKey[Command] = EntityTypeKey("Page")
@@ -37,7 +39,7 @@ object Page {
     val config = context.system.settings.config
     val receiveTimeout = config.getDuration("abwcf.page.passivation-receive-timeout").toScala
     val hostQueueShardRegion = HostQueue.getShardRegion(context.system)
-    
+
     context.setReceiveTimeout(receiveTimeout, Passivate)
 
     /**

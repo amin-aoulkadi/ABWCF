@@ -3,8 +3,8 @@ package abwcf.actors
 import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
+import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, ShardingEnvelope}
 
 import java.time.{Duration, Instant}
 import scala.collection.immutable.Queue
@@ -19,6 +19,8 @@ import scala.jdk.DurationConverters.*
  * This actor is stateful, sharded, gracefully passivated and registered with the receptionist.
  *
  * Entity ID: Domain name or IP address of the host.
+ *
+ * This entity will not be remembered (even if remembering entities is enabled).
  */
 object HostQueue { //TODO: HostQueues are not persisted so they reset after shard rebalancing.
   val TypeKey: EntityTypeKey[Command] = EntityTypeKey("HostQueue")
@@ -44,7 +46,12 @@ object HostQueue { //TODO: HostQueues are not persisted so they reset after shar
   })
 
   def getShardRegion(system: ActorSystem[?]): ActorRef[ShardingEnvelope[Command]] = {
-    ClusterSharding(system).init(Entity(TypeKey)(entityContext => HostQueue(entityContext.shard)))
+    val settings = ClusterShardingSettings(system).withRememberEntities(false) //HostQueue state is not persisted, so it doesn't make sense to remember HostQueue entities.
+
+    ClusterSharding(system).init(
+      Entity(TypeKey)(entityContext => HostQueue(entityContext.shard))
+        .withSettings(settings)
+    )
   }
 }
 
