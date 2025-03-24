@@ -40,8 +40,6 @@ object HostQueue { //TODO: HostQueues are not persisted so they reset after shar
     val crawlDelay = config.getDuration("abwcf.host-queue.crawl-delay")
     val receiveTimeout = config.getDuration("abwcf.host-queue.passivation-receive-timeout").toScala
 
-    context.system.receptionist ! Receptionist.Register(HQServiceKey, context.self)
-
     new HostQueue(crawlDelay, receiveTimeout, shard, context).emptyQueue(Instant.MIN)
   })
 
@@ -62,7 +60,9 @@ private class HostQueue private (crawlDelay: Duration,
   import HostQueue.*
 
   private def queue(urls: Queue[(String, Int)], crawlDelayEnd: Instant): Behavior[Command] = {
-    context.cancelReceiveTimeout() //Disable passivation. Non-empty HostQueues should not be passivated.
+    //Disable passivation and register with the receptionist:
+    context.cancelReceiveTimeout() //Non-empty HostQueues should not be passivated.
+    context.system.receptionist ! Receptionist.Register(HQServiceKey, context.self) //Allows the HostQueueRouter to route messages to this HostQueue.
 
     Behaviors.receiveMessage({
       case Enqueue(url, crawlDepth) => queue(urls.enqueue((url, crawlDepth)), crawlDelayEnd)
@@ -72,6 +72,7 @@ private class HostQueue private (crawlDelay: Duration,
         replyTo ! Head(head._1, head._2)
 
         if (tail.isEmpty) {
+          context.system.receptionist ! Receptionist.Deregister(HQServiceKey, context.self) //The HostQueueRouter should stop routing messages to this HostQueue.
           emptyQueue(Instant.now.plus(crawlDelay))
         } else {
           queue(tail, Instant.now.plus(crawlDelay))
