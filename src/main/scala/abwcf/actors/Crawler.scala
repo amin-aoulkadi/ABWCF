@@ -1,5 +1,6 @@
 package abwcf.actors
 
+import abwcf.actors.persistence.PagePersistence
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
 
@@ -15,14 +16,20 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
   
   def apply(): Behavior[Command] = Behaviors.setup(context => {
+    val pagePersistence = context.spawn(
+      Behaviors.supervise(PagePersistence())
+        .onFailure(SupervisorStrategy.resume), //Restarting would be problematic because the PagePersistence actor internally creates a SlickSession that has to be closed explicitly.
+      "page-persistence"
+    )
+    
     val userCodeRunner = context.spawn(
-      Behaviors.supervise(UserCodeRunner())
+      Behaviors.supervise(UserCodeRunner(pagePersistence))
         .onFailure(SupervisorStrategy.resume), //The UserCodeRunner is stateless, so resuming it is safe.
       "user-code-runner"
     )
     
     val pageManager = context.spawn(
-      Behaviors.supervise(PageManager(userCodeRunner))
+      Behaviors.supervise(PageManager(pagePersistence, userCodeRunner))
         .onFailure(SupervisorStrategy.resume), //The PageManager is stateless, so resuming it is safe.
       "page-manager"
     )

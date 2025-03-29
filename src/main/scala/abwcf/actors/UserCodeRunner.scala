@@ -1,6 +1,7 @@
 package abwcf.actors
 
 import abwcf.FetchResponse
+import abwcf.actors.persistence.PagePersistence
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
@@ -19,8 +20,8 @@ object UserCodeRunner {
   case class ProcessRedirect(url: String, statusCode: StatusCode, redirectTo: Option[String]) extends Command
   case class ProcessError(url: String, statusCode: StatusCode) extends Command
 
-  def apply(): Behavior[Command] = Behaviors.setup(context => {
-    val pageShardRegion = Page.getShardRegion(context.system)
+  def apply(pagePersistence: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup(context => {
+    val pageShardRegion = Page.getShardRegion(context.system, pagePersistence)
 
     Behaviors.receiveMessage({
       case ProcessSuccess(url, response) =>

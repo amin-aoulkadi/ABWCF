@@ -1,12 +1,11 @@
 package abwcf.actors
 
 import abwcf.FetchResponse
+import abwcf.actors.persistence.PagePersistence
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.http.scaladsl.model.StatusCode
-
-import java.net.URI
 
 /**
  * Orchestrates certain interactions with [[Page]] actors.
@@ -22,13 +21,13 @@ object PageManager { //TODO: There's not a lot of management here. Maybe rename 
   case class FetchRedirect(url: String, statusCode: StatusCode, redirectTo: Option[String]) extends Command
   case class FetchError(url: String, statusCode: StatusCode) extends Command
 
-  def apply(userCodeRunner: ActorRef[UserCodeRunner.Command]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(pagePersistence: ActorRef[PagePersistence.Command], userCodeRunner: ActorRef[UserCodeRunner.Command]): Behavior[Command] = Behaviors.setup(context => {
     val hostQueueShardRegion = HostQueue.getShardRegion(context.system)
-    val pageShardRegion = Page.getShardRegion(context.system)
+    val pageShardRegion = Page.getShardRegion(context.system, pagePersistence)
 
     Behaviors.receiveMessage({
       case Discover(url, crawlDepth) => //TODO: Add database lookup (with a small cache).
-        pageShardRegion ! ShardingEnvelope(url, Page.Discover(url, crawlDepth))
+        pageShardRegion ! ShardingEnvelope(url, Page.Discover(crawlDepth))
         Behaviors.same
 
       case FetchSuccess(url, response) =>
