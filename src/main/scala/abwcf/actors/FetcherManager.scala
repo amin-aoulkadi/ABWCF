@@ -8,6 +8,7 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 
 import scala.collection.immutable.List
 import scala.concurrent.duration.DurationInt
+import scala.jdk.DurationConverters.*
 import scala.language.postfixOps
 
 /**
@@ -29,8 +30,12 @@ object FetcherManager {
             urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] =
     Behaviors.setup[CombinedCommand](context => {
       Behaviors.withTimers(timers => {
+        val config = context.system.settings.config
+        val initialDelay = config.getDuration("abwcf.fetcher-manager.initial-delay").toScala
+        val managementDelay = config.getDuration("abwcf.fetcher-manager.management-delay").toScala
+        
         //Periodically check the number of available HostQueues:
-        timers.startTimerWithFixedDelay(CheckHostQueues, 5 seconds, 10 seconds) //TODO: Add to config.
+        timers.startTimerWithFixedDelay(CheckHostQueues, initialDelay, managementDelay)
 
         new FetcherManager(crawlDepthLimiter, hostQueueRouter, pageManager, urlNormalizer, context).fetcherManager(List.empty)
       })
