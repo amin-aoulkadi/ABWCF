@@ -1,11 +1,11 @@
 package abwcf.actors
 
-import abwcf.actors.persistence.PagePersistence
+import abwcf.actors.persistence.PagePersistenceManager
 import abwcf.{PageEntity, PageStatus}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityContext, EntityTypeKey}
+import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, ShardingEnvelope}
 
 import java.net.URI
 import scala.concurrent.duration.FiniteDuration
@@ -19,24 +19,25 @@ import scala.jdk.DurationConverters.*
  * This actor is stateful, sharded, gracefully passivated and persisted.
  *
  * Entity ID: URL of the page.
+ *
+ * This entity will not be remembered (even if remembering entities is enabled).
  */
 object Page {
   val TypeKey: EntityTypeKey[Command] = EntityTypeKey("Page")
 
   sealed trait Command
-  //Persistence commands (these have to be part of the public protocol so that they work with ShardingEnvelopes):
-  case class RecoveryResult(result: Option[PageEntity]) extends Command
-  case object InsertSuccess extends Command
-  case object UpdateSuccess extends Command
-  //Domain commands:
   case class Discover(crawlDepth: Int) extends Command
   case object Success extends Command
   case object Redirect extends Command
   case object Error extends Command
-  //Internal commands:
   private case object Passivate extends Command
+  
+  sealed trait PersistenceCommand extends Command //These have to be part of the public protocol so that they work with ShardingEnvelopes.
+  case class RecoveryResult(result: Option[PageEntity]) extends PersistenceCommand
+  case object InsertSuccess extends PersistenceCommand
+  case object UpdateSuccess extends PersistenceCommand
 
-  def apply(entityContext: EntityContext[Command], persistence: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(entityContext: EntityContext[Command], persistence: ActorRef[PagePersistenceManager.Command]): Behavior[Command] = Behaviors.setup(context => {
     Behaviors.withStash(100)(buffer => {
       val config = context.system.settings.config
       val receiveTimeout = config.getDuration("abwcf.page.passivation-receive-timeout").toScala
@@ -46,13 +47,18 @@ object Page {
     })
   })
 
-  def getShardRegion(system: ActorSystem[?], persistence: ActorRef[PagePersistence.Command]): ActorRef[ShardingEnvelope[Command]] = {
-    ClusterSharding(system).init(Entity(TypeKey)(entityContext => Page(entityContext, persistence))) //TODO: Disable remember entities.
+  def getShardRegion(system: ActorSystem[?], pagePersistenceManager: ActorRef[PagePersistenceManager.Command]): ActorRef[ShardingEnvelope[Command]] = {
+    val settings = ClusterShardingSettings(system).withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
+
+    ClusterSharding(system).init(
+      Entity(TypeKey)(entityContext => Page(entityContext, pagePersistenceManager))
+        .withSettings(settings)
+    )
   }
 }
 
 private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-                            persistence: ActorRef[PagePersistence.Command],
+                            persistence: ActorRef[PagePersistenceManager.Command],
                             receiveTimeout: FiniteDuration,
                             shard: ActorRef[ClusterSharding.ShardCommand],
                             context: ActorContext[Page.Command],
@@ -66,10 +72,10 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
     val host = URI(page.url).getHost
     hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(page.url, page.crawlDepth))
   }
-  
+
   private def recovering(url: String): Behavior[Command] = {
-    persistence ! PagePersistence.Recover(url)
-    
+    persistence ! PagePersistenceManager.Recover(url)
+
     Behaviors.receiveMessage({
       case RecoveryResult(Some(page)) if page.status == PageStatus.Discovered =>
         buffer.unstashAll(discoveredPage(page))
@@ -85,18 +91,18 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
         Behaviors.same
     })
   }
-  
+
   private def unknownPage(url: String): Behavior[Command] = Behaviors.receiveMessage({
     case Discover(crawlDepth) =>
       val page = PageEntity(url, PageStatus.Discovered, crawlDepth)
-      persistence ! PagePersistence.Insert(page)
+      persistence ! PagePersistenceManager.Insert(page)
       buffer.unstashAll(inserting(page))
-      
+
     case other =>
       buffer.stash(other)
       Behaviors.same
   })
-  
+
   private def inserting(page: PageEntity): Behavior[Command] = Behaviors.receiveMessage({
     case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
     case InsertSuccess => buffer.unstashAll(discoveredPage(page))
@@ -105,24 +111,25 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
       buffer.stash(other)
       Behaviors.same
   })
-  
+
   private def discoveredPage(page: PageEntity): Behavior[Command] = {
     addToHostQueue(page)
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
-    
+
     Behaviors.receiveMessage({
+      case _: PersistenceCommand => Behaviors.same //The PageRestorer may attempt to restore pages that are already active.
       case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
-      
+
       case Success | Redirect | Error =>
-        persistence ! PagePersistence.UpdateStatus(page.url, PageStatus.Processed)
+        persistence ! PagePersistenceManager.UpdateStatus(page.url, PageStatus.Processed)
         updating(page.copy(status = PageStatus.Processed))
-      
+
       case Passivate =>
         shard ! ClusterSharding.Passivate(context.self)
         Behaviors.same
     })
   }
-  
+
   private def updating(page: PageEntity): Behavior[Command] = Behaviors.receiveMessage({
     case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
     case UpdateSuccess => buffer.unstashAll(processedPage(page))
@@ -134,7 +141,7 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
 
   private def processedPage(page: PageEntity): Behavior[Command] = {
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
-    
+
     Behaviors.receiveMessage({
       case Passivate =>
         shard ! ClusterSharding.Passivate(context.self)

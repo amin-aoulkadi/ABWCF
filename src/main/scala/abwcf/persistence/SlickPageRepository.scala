@@ -24,7 +24,7 @@ class SlickPageRepository(implicit val session: SlickSession, val materializer: 
     override def * = (url, status, crawlDepth).mapTo[PageEntity]
   }
 
-  private lazy val pages = TableQuery[PageTable]
+  private lazy val pages = TableQuery[PageTable] //Why does this have type Any?!
 
   override def insert(page: PageEntity): Future[Int] = {
     session.db.run(pages += page)
@@ -48,8 +48,12 @@ class SlickPageRepository(implicit val session: SlickSession, val materializer: 
     Slick.source(query).runWith(Sink.headOption)
   }
 
-  override def findByStatus(status: PageStatus): Future[Seq[PageEntity]] = {
-    val query = pages.filter(_.status === status).result
+  override def findByStatus(status: PageStatus, limit: Int): Future[Seq[PageEntity]] = {
+    val query = pages
+      .filter(_.status === status)
+      .take(limit)
+      .result
+
     Slick.source(query).runWith(Sink.seq)
   }
 }

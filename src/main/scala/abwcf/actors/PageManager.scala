@@ -1,7 +1,7 @@
 package abwcf.actors
 
 import abwcf.FetchResponse
-import abwcf.actors.persistence.PagePersistence
+import abwcf.actors.persistence.PagePersistenceManager
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
@@ -16,14 +16,13 @@ import org.apache.pekko.http.scaladsl.model.StatusCode
  */
 object PageManager { //TODO: There's not a lot of management here. Maybe rename to PageCoordinator or PageOrchestrator.
   sealed trait Command
-  case class Discover(url: String, crawlDepth: Int) extends Command //TODO: Rename to Discover.
+  case class Discover(url: String, crawlDepth: Int) extends Command
   case class FetchSuccess(url: String, response: FetchResponse) extends Command
   case class FetchRedirect(url: String, statusCode: StatusCode, redirectTo: Option[String]) extends Command
   case class FetchError(url: String, statusCode: StatusCode) extends Command
 
-  def apply(pagePersistence: ActorRef[PagePersistence.Command], userCodeRunner: ActorRef[UserCodeRunner.Command]): Behavior[Command] = Behaviors.setup(context => {
-    val hostQueueShardRegion = HostQueue.getShardRegion(context.system)
-    val pageShardRegion = Page.getShardRegion(context.system, pagePersistence)
+  def apply(pagePersistenceManager: ActorRef[PagePersistenceManager.Command], userCodeRunner: ActorRef[UserCodeRunner.Command]): Behavior[Command] = Behaviors.setup(context => {
+    val pageShardRegion = Page.getShardRegion(context.system, pagePersistenceManager)
 
     Behaviors.receiveMessage({
       case Discover(url, crawlDepth) => //TODO: Add database lookup (with a small cache).

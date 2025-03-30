@@ -12,7 +12,7 @@ import scala.util.{Failure, Success}
 object PageReader {
   sealed trait Command
   case class Recover(url: String) extends Command
-  case class FindByStatus(status: PageStatus, replyTo: ActorRef[ResultSeq]) extends Command
+  case class FindByStatus(status: PageStatus, limit: Int, replyTo: ActorRef[ResultSeq]) extends Command
   private case class RecoverSuccess(result: Option[PageEntity], replyToUrl: String) extends Command
   private case class FindByStatusSuccess(result: Seq[PageEntity], replyTo: ActorRef[ResultSeq]) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
@@ -29,8 +29,8 @@ object PageReader {
         })
         Behaviors.same
 
-      case FindByStatus(status, replyTo) =>
-        context.pipeToSelf(pageRepository.findByStatus(status))({
+      case FindByStatus(status, limit, replyTo) =>
+        context.pipeToSelf(pageRepository.findByStatus(status, limit))({
           case Success(result) => FindByStatusSuccess(result, replyTo)
           case Failure(throwable) => FutureFailure(throwable)
         })

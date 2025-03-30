@@ -9,7 +9,7 @@ import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 
 import scala.util.{Failure, Success}
 
-object PageInserter {
+object PageInserter { //TODO: Batch inserts.
   sealed trait Command
   case class Insert(page: PageEntity) extends Command
   private case class FutureSuccess(url: String) extends Command
