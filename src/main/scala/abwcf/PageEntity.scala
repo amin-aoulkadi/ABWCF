@@ -1,7 +1,7 @@
 package abwcf
 
 enum PageStatus {
-  case Discovered, Processed
+  case Unknown, Discovered, Processed
 }
 
 case class PageEntity(

@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.FetchResponse
+import abwcf.{FetchResponse, PageEntity, PageStatus}
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
@@ -74,18 +74,18 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
     //Handle the reply from the HostQueue:
     Behaviors.receiveMessage({
-      case HostQueue.Head(url, crawlDepth) =>
-        context.log.info("Fetching {}", url)
+      case HostQueue.Head(page) =>
+        context.log.info("Fetching {}", page.url)
 
         //Send the HTTP request:
-        val responseFuture = http.singleRequest(HttpRequest(uri = Uri(url))) //TODO: Set Accept header (e.g. "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")?
+        val responseFuture = http.singleRequest(HttpRequest(uri = Uri(page.url))) //TODO: Set Accept header (e.g. "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")?
 
         context.pipeToSelf(responseFuture)({
           case Success(response) => FutureSuccess(response)
           case Failure(throwable) => FutureFailure(throwable)
         })
 
-        receiveHttpResponse(url, crawlDepth, null)
+        receiveHttpResponse(page, null)
 
       case HostQueue.Unavailable | AskFailure =>
         requestNextUrl()
@@ -100,32 +100,32 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     })
   }
 
-  private def receiveHttpResponse(url: String, crawlDepth: Int, response: HttpResponse): Behavior[CombinedCommand] = Behaviors.receiveMessage({
+  private def receiveHttpResponse(page: PageEntity, response: HttpResponse): Behavior[CombinedCommand] = Behaviors.receiveMessage({
     //Handle 4xx and 5xx error responses:
     case FutureSuccess(response: HttpResponse) if response.status.isFailure =>
-      context.log.info("Received {} for {}", response.status.toString, url)
+      context.log.info("Received {} for {}", response.status.toString, page.url)
 
       //Discard the response entity and notify the Page:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
-      pageManager ! PageManager.FetchError(url, response.status)
+      pageManager ! PageManager.FetchError(page, response.status)
 
       buffer.unstashAll(requestNextUrl())
 
     //Handle 3xx redirection responses:
     case FutureSuccess(response: HttpResponse) if response.status.isRedirection =>
-      context.log.info("Received {} for {}", response.status.toString, url)
+      context.log.info("Received {} for {}", response.status.toString, page.url)
 
       //Discard the response entity, notify the Page and send the redirect URL to the UrlNormalizer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
-      val redirectTo = getRedirectUrl(response, url)
-      pageManager ! PageManager.FetchRedirect(url, response.status, redirectTo)
-      redirectTo.foreach(urlNormalizer ! UrlNormalizer.Normalize(_, crawlDepth)) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
+      val redirectTo = getRedirectUrl(response, page.url)
+      pageManager ! PageManager.FetchRedirect(page, response.status, redirectTo)
+      redirectTo.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageEntity(url, PageStatus.Unknown, page.crawlDepth))) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
 
       buffer.unstashAll(requestNextUrl())
 
     //Handle other HTTP responses:
     case FutureSuccess(response: HttpResponse) =>
-      context.log.info("Received {} for {}", response.status.toString, url)
+      context.log.info("Received {} for {}", response.status.toString, page.url)
       //TODO: What about responses that are not 200 OK?
       //TODO: Check if response.encoding needs to be handled (https://pekko.apache.org/docs/pekko-http/current/common/encoding.html#client-side).
 
@@ -139,21 +139,21 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
         case Failure(throwable) => FutureFailure(throwable)
       })
 
-      receiveHttpResponse(url, crawlDepth, response)
+      receiveHttpResponse(page, response)
 
     //Send the complete response downstream after the response body has been received:
     case FutureSuccess(responseBody: ByteString) =>
-      context.log.info("Received {} bytes ({}) for {}", responseBody.length, response.entity.contentType, url)
+      context.log.info("Received {} bytes ({}) for {}", responseBody.length, response.entity.contentType, page.url)
 
       if (ParseableMediaTypes.contains(response.entity.contentType.mediaType)) { //Possible alternative: Use mediaType.binary or mediaType.isText.
-        crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(url, crawlDepth, responseBody)
+        crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(page, responseBody)
       }
 
-      pageManager ! PageManager.FetchSuccess(url, new FetchResponse(response, responseBody))
+      pageManager ! PageManager.FetchSuccess(page, new FetchResponse(response, responseBody))
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>
-      context.log.error("Error while fetching {}", url, throwable)
+      context.log.error("Error while fetching {}", page.url, throwable)
       buffer.unstashAll(requestNextUrl())
 
     case Stop =>

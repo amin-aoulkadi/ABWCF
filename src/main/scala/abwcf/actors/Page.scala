@@ -70,7 +70,7 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
    */
   private def addToHostQueue(page: PageEntity): Unit = {
     val host = URI(page.url).getHost
-    hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(page.url, page.crawlDepth))
+    hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(page))
   }
 
   private def recovering(url: String): Behavior[Command] = {

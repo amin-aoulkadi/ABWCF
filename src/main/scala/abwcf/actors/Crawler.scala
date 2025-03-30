@@ -1,6 +1,7 @@
 package abwcf.actors
 
 import abwcf.actors.persistence.PagePersistenceManager
+import abwcf.{PageEntity, PageStatus}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
 
@@ -78,7 +79,7 @@ object Crawler {
     
     Behaviors.receiveMessage({
       case SeedUrls(urls) =>
-        urls.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(url, 0))
+        urls.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageEntity(url, PageStatus.Unknown, 0)))
         Behaviors.same
     })
   })

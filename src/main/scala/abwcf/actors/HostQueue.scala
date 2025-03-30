@@ -1,5 +1,6 @@
 package abwcf.actors
 
+import abwcf.PageEntity
 import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -27,12 +28,12 @@ object HostQueue { //TODO: HostQueues are not persisted so they reset after shar
   val HQServiceKey: ServiceKey[Command] = ServiceKey("HostQueue")
 
   sealed trait Command
-  case class Enqueue(url: String, crawlDepth: Int) extends Command
+  case class Enqueue(page: PageEntity) extends Command
   case class GetHead(replyTo: ActorRef[Reply]) extends Command
   private case object Passivate extends Command
 
   sealed trait Reply
-  case class Head(url: String, crawlDepth: Int) extends Reply
+  case class Head(page: PageEntity) extends Reply
   case object Unavailable extends Reply
 
   def apply(shard: ActorRef[ClusterSharding.ShardCommand]): Behavior[Command] = Behaviors.setup(context => {
@@ -59,17 +60,17 @@ private class HostQueue private (crawlDelay: Duration,
                                  context: ActorContext[HostQueue.Command]) {
   import HostQueue.*
 
-  private def queue(urls: Queue[(String, Int)], crawlDelayEnd: Instant): Behavior[Command] = {
+  private def queue(pages: Queue[PageEntity], crawlDelayEnd: Instant): Behavior[Command] = {
     //Disable passivation and register with the receptionist:
     context.cancelReceiveTimeout() //Non-empty HostQueues should not be passivated.
     context.system.receptionist ! Receptionist.Register(HQServiceKey, context.self) //Allows the HostQueueRouter to route messages to this HostQueue.
 
     Behaviors.receiveMessage({
-      case Enqueue(url, crawlDepth) => queue(urls.enqueue((url, crawlDepth)), crawlDelayEnd)
+      case Enqueue(page) => queue(pages.enqueue(page), crawlDelayEnd)
 
       case GetHead(replyTo) if Instant.now.isAfter(crawlDelayEnd) =>
-        val (head, tail) = urls.dequeue
-        replyTo ! Head(head._1, head._2)
+        val (head, tail) = pages.dequeue
+        replyTo ! Head(head)
 
         if (tail.isEmpty) {
           context.system.receptionist ! Receptionist.Deregister(HQServiceKey, context.self) //The HostQueueRouter should stop routing messages to this HostQueue.
@@ -92,7 +93,7 @@ private class HostQueue private (crawlDelay: Duration,
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation. Empty HostQueues can be passivated (but not immediately as there may still be messages in the mailbox).
 
     Behaviors.receiveMessage({
-      case Enqueue(url, crawlDepth) => queue(Queue((url, crawlDepth)), crawlDelayEnd)
+      case Enqueue(page) => queue(Queue(page), crawlDelayEnd)
 
       case GetHead(replyTo) =>
         replyTo ! Unavailable

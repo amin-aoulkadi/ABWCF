@@ -1,7 +1,7 @@
 package abwcf.actors
 
-import abwcf.FetchResponse
 import abwcf.actors.persistence.PagePersistenceManager
+import abwcf.{FetchResponse, PageEntity}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
@@ -16,29 +16,29 @@ import org.apache.pekko.http.scaladsl.model.StatusCode
  */
 object PageManager { //TODO: There's not a lot of management here. Maybe rename to PageCoordinator or PageOrchestrator.
   sealed trait Command
-  case class Discover(url: String, crawlDepth: Int) extends Command
-  case class FetchSuccess(url: String, response: FetchResponse) extends Command
-  case class FetchRedirect(url: String, statusCode: StatusCode, redirectTo: Option[String]) extends Command
-  case class FetchError(url: String, statusCode: StatusCode) extends Command
+  case class Discover(page: PageEntity) extends Command
+  case class FetchSuccess(page: PageEntity, response: FetchResponse) extends Command
+  case class FetchRedirect(page: PageEntity, statusCode: StatusCode, redirectTo: Option[String]) extends Command
+  case class FetchError(page: PageEntity, statusCode: StatusCode) extends Command
 
   def apply(pagePersistenceManager: ActorRef[PagePersistenceManager.Command], userCodeRunner: ActorRef[UserCodeRunner.Command]): Behavior[Command] = Behaviors.setup(context => {
     val pageShardRegion = Page.getShardRegion(context.system, pagePersistenceManager)
 
     Behaviors.receiveMessage({
-      case Discover(url, crawlDepth) => //TODO: Add database lookup (with a small cache).
-        pageShardRegion ! ShardingEnvelope(url, Page.Discover(crawlDepth))
+      case Discover(page) => //TODO: Add database lookup (with a small cache).
+        pageShardRegion ! ShardingEnvelope(page.url, Page.Discover(page.crawlDepth))
         Behaviors.same
 
-      case FetchSuccess(url, response) =>
-        userCodeRunner ! UserCodeRunner.ProcessSuccess(url, response)
+      case FetchSuccess(page, response) =>
+        userCodeRunner ! UserCodeRunner.ProcessSuccess(page, response)
         Behaviors.same
 
-      case FetchRedirect(url, statusCode, redirectTo) =>
-        userCodeRunner ! UserCodeRunner.ProcessRedirect(url, statusCode, redirectTo)
+      case FetchRedirect(page, statusCode, redirectTo) =>
+        userCodeRunner ! UserCodeRunner.ProcessRedirect(page, statusCode, redirectTo)
         Behaviors.same
 
-      case FetchError(url, statusCode) => //TODO: Retry fetching later. Maybe let the user code decide whether to retry or not.
-        userCodeRunner ! UserCodeRunner.ProcessError(url, statusCode)
+      case FetchError(page, statusCode) => //TODO: Retry fetching later. Maybe let the user code decide whether to retry or not.
+        userCodeRunner ! UserCodeRunner.ProcessError(page, statusCode)
         Behaviors.same
     })
   })

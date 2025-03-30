@@ -1,9 +1,10 @@
 package abwcf.actors
 
+import abwcf.PageEntity
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 
-import java.net.{URI, URISyntaxException}
+import java.net.URI
 import java.util.Locale
 
 /**
@@ -21,7 +22,7 @@ import java.util.Locale
  */
 object UrlNormalizer {
   sealed trait Command
-  case class Normalize(url: String, crawlDepth: Int) extends Command
+  case class Normalize(page: PageEntity) extends Command
 
   def apply(urlFilter: ActorRef[UrlFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
@@ -30,10 +31,10 @@ object UrlNormalizer {
     val removeFragment = config.getBoolean("abwcf.url-normalizer.remove-fragment")
 
     Behaviors.receiveMessage({
-      case Normalize(urlString, crawlDepth) =>
+      case Normalize(page) =>
         try {
           //Normalize and remove URL components as configured:
-          val uri = URI(urlString).normalize()
+          val uri = URI(page.url).normalize()
           val scheme = uri.getScheme.toLowerCase(Locale.ROOT)
           val userInfo = if removeUserInfo then null else uri.getRawUserInfo
           val host = uri.getHost.toLowerCase(Locale.ROOT)
@@ -51,9 +52,9 @@ object UrlNormalizer {
           if query != null then builder += '?' ++= query
           if fragment != null then builder += '#' ++= fragment
 
-          urlFilter ! UrlFilter.Filter(builder.toString, crawlDepth)
+          urlFilter ! UrlFilter.Filter(page.copy(url = builder.toString()))
         } catch {
-          case e: Exception => context.log.error("Exception while normalizing URL {}", urlString, e)
+          case e: Exception => context.log.error("Exception while normalizing URL {}", page.url, e)
         }
 
         Behaviors.same
