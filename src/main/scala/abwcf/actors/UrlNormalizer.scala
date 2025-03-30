@@ -8,7 +8,7 @@ import java.util.Locale
 
 /**
  * Normalizes URLs and removes user information, query and fragment URL components as configured.
- * 
+ *
  * There should be one [[UrlNormalizer]] actor per node.
  *
  * This actor is stateless.
@@ -23,7 +23,6 @@ object UrlNormalizer {
   sealed trait Command
   case class Normalize(url: String, crawlDepth: Int) extends Command
 
-  @throws[URISyntaxException]
   def apply(urlFilter: ActorRef[UrlFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
     val removeUserInfo = config.getBoolean("abwcf.url-normalizer.remove-userinfo")
@@ -32,26 +31,31 @@ object UrlNormalizer {
 
     Behaviors.receiveMessage({
       case Normalize(urlString, crawlDepth) =>
-        //Normalize and remove URL components as configured:
-        val uri = URI(urlString).normalize()
-        val scheme = uri.getScheme.toLowerCase(Locale.ROOT)
-        val userInfo = if removeUserInfo then null else uri.getRawUserInfo
-        val host = uri.getHost.toLowerCase(Locale.ROOT)
-        val port = normalizePort(uri.getPort, scheme)
-        val path = if uri.getRawPath.isEmpty then "/" else uri.getRawPath
-        val query = if removeQuery then null else uri.getRawQuery
-        val fragment = if removeFragment then null else uri.getRawFragment
+        try {
+          //Normalize and remove URL components as configured:
+          val uri = URI(urlString).normalize()
+          val scheme = uri.getScheme.toLowerCase(Locale.ROOT)
+          val userInfo = if removeUserInfo then null else uri.getRawUserInfo
+          val host = uri.getHost.toLowerCase(Locale.ROOT)
+          val port = normalizePort(uri.getPort, scheme)
+          val path = if uri.getRawPath.isEmpty then "/" else uri.getRawPath
+          val query = if removeQuery then null else uri.getRawQuery
+          val fragment = if removeFragment then null else uri.getRawFragment
 
-        //Assemble the normalized URL (the URI class can not be used for this due to issues with percent-encoding):
-        val builder = StringBuilder(scheme) ++= "://"
-        if userInfo != null then builder ++= userInfo += '@'
-        builder ++= host
-        if port >= 0 then (builder += ':').append(port)
-        builder ++= path
-        if query != null then builder += '?' ++= query
-        if fragment != null then builder += '#' ++= fragment
+          //Assemble the normalized URL (the URI class can not be used for this due to issues with percent-encoding):
+          val builder = StringBuilder(scheme) ++= "://"
+          if userInfo != null then builder ++= userInfo += '@'
+          builder ++= host
+          if port >= 0 then (builder += ':').append(port)
+          builder ++= path
+          if query != null then builder += '?' ++= query
+          if fragment != null then builder += '#' ++= fragment
 
-        urlFilter ! UrlFilter.Filter(builder.toString, crawlDepth)
+          urlFilter ! UrlFilter.Filter(builder.toString, crawlDepth)
+        } catch {
+          case e: Exception => context.log.error("Exception while normalizing URL {}", urlString, e)
+        }
+
         Behaviors.same
     })
   })
