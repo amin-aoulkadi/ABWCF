@@ -8,7 +8,6 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity
 import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, ShardingEnvelope}
 
 import java.net.URI
-import scala.concurrent.duration.FiniteDuration
 import scala.jdk.DurationConverters.*
 
 /**
@@ -31,7 +30,7 @@ object Page {
   case object Redirect extends Command
   case object Error extends Command
   private case object Passivate extends Command
-  
+
   sealed trait PersistenceCommand extends Command //These have to be part of the public protocol so that they work with ShardingEnvelopes.
   case class RecoveryResult(result: Option[PageEntity]) extends PersistenceCommand
   case object InsertSuccess extends PersistenceCommand
@@ -39,11 +38,8 @@ object Page {
 
   def apply(entityContext: EntityContext[Command], persistence: ActorRef[PagePersistenceManager.Command]): Behavior[Command] = Behaviors.setup(context => {
     Behaviors.withStash(100)(buffer => {
-      val config = context.system.settings.config
-      val receiveTimeout = config.getDuration("abwcf.page.passivation-receive-timeout").toScala
-      val hostQueueShardRegion = HostQueue.getShardRegion(context.system)
-
-      new Page(hostQueueShardRegion, persistence, receiveTimeout, entityContext.shard, context, buffer).recovering(entityContext.entityId)
+      val hostQueueShardRegion = HostQueue.getShardRegion(context.system) //TODO: Try to provide this from outside to reduce spam in the log.
+      new Page(hostQueueShardRegion, persistence, entityContext.shard, context, buffer).recovering(entityContext.entityId)
     })
   })
 
@@ -59,11 +55,13 @@ object Page {
 
 private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
                             persistence: ActorRef[PagePersistenceManager.Command],
-                            receiveTimeout: FiniteDuration,
                             shard: ActorRef[ClusterSharding.ShardCommand],
                             context: ActorContext[Page.Command],
                             buffer: StashBuffer[Page.Command]) {
   import Page.*
+
+  private val config = context.system.settings.config
+  private val receiveTimeout = config.getDuration("abwcf.page.passivation-receive-timeout").toScala
 
   /**
    * Adds the URL to a [[HostQueue]] so that it can be fetched.

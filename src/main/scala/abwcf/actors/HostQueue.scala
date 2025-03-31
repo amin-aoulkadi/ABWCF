@@ -7,9 +7,8 @@ import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, ShardingEnvelope}
 
-import java.time.{Duration, Instant}
+import java.time.Instant
 import scala.collection.immutable.Queue
-import scala.concurrent.duration.FiniteDuration
 import scala.jdk.DurationConverters.*
 
 /**
@@ -37,11 +36,7 @@ object HostQueue { //TODO: HostQueues are not persisted so they reset after shar
   case object Unavailable extends Reply
 
   def apply(shard: ActorRef[ClusterSharding.ShardCommand]): Behavior[Command] = Behaviors.setup(context => {
-    val config = context.system.settings.config
-    val crawlDelay = config.getDuration("abwcf.host-queue.crawl-delay")
-    val receiveTimeout = config.getDuration("abwcf.host-queue.passivation-receive-timeout").toScala
-
-    new HostQueue(crawlDelay, receiveTimeout, shard, context).emptyQueue(Instant.MIN)
+    new HostQueue(shard, context).emptyQueue(Instant.MIN)
   })
 
   def getShardRegion(system: ActorSystem[?]): ActorRef[ShardingEnvelope[Command]] = {
@@ -54,11 +49,13 @@ object HostQueue { //TODO: HostQueues are not persisted so they reset after shar
   }
 }
 
-private class HostQueue private (crawlDelay: Duration,
-                                 receiveTimeout: FiniteDuration,
-                                 shard: ActorRef[ClusterSharding.ShardCommand],
+private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
                                  context: ActorContext[HostQueue.Command]) {
   import HostQueue.*
+
+  private val config = context.system.settings.config
+  private val crawlDelay = config.getDuration("abwcf.host-queue.crawl-delay")
+  private val receiveTimeout = config.getDuration("abwcf.host-queue.passivation-receive-timeout").toScala
 
   private def queue(pages: Queue[PageEntity], crawlDelayEnd: Instant): Behavior[Command] = {
     //Disable passivation and register with the receptionist:
