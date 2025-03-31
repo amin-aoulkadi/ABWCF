@@ -3,12 +3,12 @@ package abwcf.actors
 import abwcf.{FetchResponse, PageEntity, PageStatus}
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.http.scaladsl.model.headers.Location
 import org.apache.pekko.http.scaladsl.{Http, HttpExt}
 import org.apache.pekko.stream.Materializer
-import org.apache.pekko.util.{ByteString, Timeout}
+import org.apache.pekko.util.ByteString
 
 import scala.concurrent.duration.DurationInt
 import scala.language.postfixOps
@@ -28,53 +28,50 @@ object Fetcher {
   private val ParseableMediaTypes = List(MediaTypes.`text/html`, MediaTypes.`application/xhtml+xml`)
 
   sealed trait Command
+  case class Fetch(page: PageEntity) extends Command
   case object Stop extends Command
-  private case object AskFailure extends Command
   private case class FutureSuccess(value: HttpResponse | ByteString) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
-
-  private type CombinedCommand = Command | HostQueue.Reply
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
             pageManager: ActorRef[PageManager.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] =
-    Behaviors.setup[CombinedCommand](context => {
+    Behaviors.setup(context => {
       Behaviors.withStash(5)(buffer => {
         val http = Http(context.system.toClassic)
         val materializer = Materializer(context)
+        val bytesPerSec = 1_000_000 //Don't make this value too small. //TODO: Add to config.
 
-        //TODO: Add these to config:
-        val urlRequestTimeout = 3 seconds
-        val bytesPerSec = 1_000_000 //Don't make this value too small.
+        val urlSupplier = context.spawn(
+          Behaviors.supervise(UrlSupplier(context.self, hostQueueRouter))
+            .onFailure(SupervisorStrategy.restart),
+          "url-supplier"
+        )
 
-        new Fetcher(crawlDepthLimiter, hostQueueRouter, pageManager, urlNormalizer, http, materializer, urlRequestTimeout, bytesPerSec, context, buffer).requestNextUrl()
+        new Fetcher(crawlDepthLimiter, pageManager, urlNormalizer, urlSupplier, http, materializer, bytesPerSec, context, buffer).requestNextUrl()
       })
-    }).narrow
+    })
 }
 
 private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
-                               hostQueueRouter: ActorRef[HostQueue.Command],
                                pageManager: ActorRef[PageManager.Command],
                                urlNormalizer: ActorRef[UrlNormalizer.Command],
+                               urlSupplier: ActorRef[UrlSupplier.Command],
                                http: HttpExt,
                                materializer: Materializer,
-                               urlRequestTimeout: Timeout,
                                bytesPerSec: Int,
-                               context: ActorContext[Fetcher.CombinedCommand],
-                               buffer: StashBuffer[Fetcher.CombinedCommand]) {
+                               context: ActorContext[Fetcher.Command],
+                               buffer: StashBuffer[Fetcher.Command]) {
   import Fetcher.*
 
-  private def requestNextUrl(): Behavior[CombinedCommand] = {
-    //Request a URL from the HostQueueRouter:
-    context.ask(hostQueueRouter, HostQueue.GetHead.apply)({
-      case Success(reply) => reply
-      case Failure(_) => AskFailure
-    })(urlRequestTimeout)
+  private def requestNextUrl(): Behavior[Command] = {
+    //Request a URL from the UrlSupplier:
+    urlSupplier ! UrlSupplier.RequestNext
 
-    //Handle the reply from the HostQueue:
+    //Wait for a response from the UrlSupplier:
     Behaviors.receiveMessage({
-      case HostQueue.Head(page) =>
+      case Fetch(page) =>
         context.log.info("Fetching {}", page.url)
 
         //Send the HTTP request:
@@ -87,9 +84,6 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
         receiveHttpResponse(page, null)
 
-      case HostQueue.Unavailable | AskFailure =>
-        requestNextUrl()
-
       case Stop =>
         context.log.debug("Stopping")
         Behaviors.stopped
@@ -100,7 +94,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     })
   }
 
-  private def receiveHttpResponse(page: PageEntity, response: HttpResponse): Behavior[CombinedCommand] = Behaviors.receiveMessage({
+  private def receiveHttpResponse(page: PageEntity, response: HttpResponse): Behavior[Command] = Behaviors.receiveMessage({
     //Handle 4xx and 5xx error responses:
     case FutureSuccess(response: HttpResponse) if response.status.isFailure =>
       context.log.info("Received {} for {}", response.status.toString, page.url)
@@ -157,7 +151,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       buffer.unstashAll(requestNextUrl())
 
     case Stop =>
-      buffer.stash(Stop)
+      buffer.stash(Stop) //The Fetcher does not stop while it is actively fetching.
       Behaviors.same
 
     case other =>
