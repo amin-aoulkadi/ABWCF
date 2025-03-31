@@ -4,7 +4,6 @@ import abwcf.{PageEntity, PageStatus}
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.connectors.slick.scaladsl.{Slick, SlickSession}
 import org.apache.pekko.stream.scaladsl.Sink
-import slick.lifted.TableQuery
 
 import scala.concurrent.Future
 
@@ -24,7 +23,7 @@ class SlickPageRepository(implicit val session: SlickSession, val materializer: 
     override def * = (url, status, crawlDepth).mapTo[PageEntity]
   }
 
-  private lazy val pages = TableQuery[PageTable] //Why does this have type Any?!
+  private lazy val pages = TableQuery[PageTable]
 
   override def insert(page: PageEntity): Future[Int] = {
     session.db.run(pages += page)
