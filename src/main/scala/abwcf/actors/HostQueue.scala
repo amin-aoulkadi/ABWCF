@@ -40,7 +40,9 @@ object HostQueue { //TODO: HostQueues are not persisted so they reset after shar
   })
 
   def getShardRegion(system: ActorSystem[?]): ActorRef[ShardingEnvelope[Command]] = {
-    val settings = ClusterShardingSettings(system).withRememberEntities(false) //HostQueue state is not persisted, so it doesn't make sense to remember HostQueue entities.
+    val settings = ClusterShardingSettings(system)
+      .withRememberEntities(false) //HostQueue state is not persisted, so it doesn't make sense to remember HostQueue entities.
+      .withNoPassivationStrategy() //Disable automatic passivation.
 
     ClusterSharding(system).init(
       Entity(TypeKey)(entityContext => HostQueue(entityContext.shard))

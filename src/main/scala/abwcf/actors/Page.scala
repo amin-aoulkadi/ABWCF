@@ -36,18 +36,23 @@ object Page {
   case object InsertSuccess extends PersistenceCommand
   case object UpdateSuccess extends PersistenceCommand
 
-  def apply(entityContext: EntityContext[Command], persistence: ActorRef[PagePersistenceManager.Command]): Behavior[Command] = Behaviors.setup(context => {
-    Behaviors.withStash(100)(buffer => {
-      val hostQueueShardRegion = HostQueue.getShardRegion(context.system) //TODO: Try to provide this from outside to reduce spam in the log.
-      new Page(hostQueueShardRegion, persistence, entityContext.shard, context, buffer).recovering(entityContext.entityId)
-    })
+  def apply(entityContext: EntityContext[Command],
+            hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
+            persistence: ActorRef[PagePersistenceManager.Command]): Behavior[Command] =
+    Behaviors.setup(context => {
+      Behaviors.withStash(100)(buffer => {
+        new Page(hostQueueShardRegion, persistence, entityContext.shard, context, buffer).recovering(entityContext.entityId)
+      })
   })
 
   def getShardRegion(system: ActorSystem[?], pagePersistenceManager: ActorRef[PagePersistenceManager.Command]): ActorRef[ShardingEnvelope[Command]] = {
-    val settings = ClusterShardingSettings(system).withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
+    val hostQueueShardRegion = HostQueue.getShardRegion(system) //Getting the shard region here (instead of in Page.apply()) significantly reduces spam in the log.
+    val settings = ClusterShardingSettings(system)
+      .withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
+      .withNoPassivationStrategy() //Disable automatic passivation.
 
     ClusterSharding(system).init(
-      Entity(TypeKey)(entityContext => Page(entityContext, pagePersistenceManager))
+      Entity(TypeKey)(entityContext => Page(entityContext, hostQueueShardRegion, pagePersistenceManager))
         .withSettings(settings)
     )
   }
