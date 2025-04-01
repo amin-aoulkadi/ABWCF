@@ -4,6 +4,7 @@ import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, TimerSche
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.Timeout
 
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.FiniteDuration
 import scala.jdk.DurationConverters.*
@@ -12,7 +13,7 @@ import scala.util.{Failure, Success}
 /**
  * Requests URLs for a [[Fetcher]] from a [[HostQueueRouter]].
  *
- * URLs are requested in bursts. There is a delay between bursts to avoid fruitless request-reply cycles when all or most [[HostQueue]]s are unavailable. Without this delay, such request-reply cycles would result in significant CPU usage. The delay increases after every unsuccessful burst and decreases after every successful burst.
+ * URLs are requested in bursts. There is a delay between bursts to avoid fruitless request-reply cycles when all or most [[HostQueue]]s are unavailable. Without this delay, such request-reply cycles would result in significant CPU usage.
  *
  * There should be one [[UrlSupplier]] actor per [[Fetcher]] actor.
  *
@@ -27,7 +28,7 @@ object UrlSupplier {
 
   def apply(fetcher: ActorRef[Fetcher.Command], hostQueueRouter: ActorRef[HostQueue.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withTimers(timers => {
-      new UrlSupplier(fetcher, hostQueueRouter, context, timers).requestBurst(0, 0)
+      new UrlSupplier(fetcher, hostQueueRouter, context, timers).requestBurst(0, Instant.MAX)
     })
   }).narrow
 }
@@ -41,9 +42,8 @@ private class UrlSupplier private(fetcher: ActorRef[Fetcher.Command],
   private val config = context.system.settings.config
   private val askTimeout = config.getDuration("abwcf.url-supplier.ask-timeout").toScala
   private val burstLength = config.getInt("abwcf.url-supplier.burst-length")
-  private val minDelay = config.getInt("abwcf.url-supplier.min-delay")
-  private val maxDelay = config.getInt("abwcf.url-supplier.max-delay")
-  private val delayStep = config.getInt("abwcf.url-supplier.delay-step")
+  private val minDelay = FiniteDuration(config.getInt("abwcf.url-supplier.min-delay"), TimeUnit.MILLISECONDS)
+  private val maxDelay = FiniteDuration(config.getInt("abwcf.url-supplier.max-delay"), TimeUnit.MILLISECONDS)
 
   /**
    * Asks the HostQueueRouter for a URL.
@@ -55,21 +55,49 @@ private class UrlSupplier private(fetcher: ActorRef[Fetcher.Command],
     })(askTimeout)
   }
 
-  private def requestBurst(burstCounter: Int, delay: Int): Behavior[CombinedCommand] = Behaviors.receiveMessage({
+  /**
+   * Backs off before starting a new request burst.
+   */
+  private def backOff(delayEnd: Instant): Unit = {
+    //Determine the delay:
+    var delay = Instant.now().until(delayEnd).toScala
+    delay = delay.max(minDelay) //Ensure that delay ≥ minDelay.
+    delay = delay.min(maxDelay) //Ensure that delay ≤ maxDelay.
+
+    context.log.debug("Backing off for {} ms", delay.toMillis)
+    timers.startSingleTimer(RequestNext, delay)
+  }
+
+  private def requestBurst(burstCounter: Int, smallestSeenInstant: Instant): Behavior[CombinedCommand] = Behaviors.receiveMessage({
     case RequestNext =>
+      //Start a new request burst:
       askForUrl()
-      requestBurst(1, delay) //Reset the burst counter.
+      requestBurst(1, Instant.MAX) //Reset the burst counter and the smallest seen instant.
 
     case HostQueue.Head(page) =>
       fetcher ! Fetcher.Fetch(page)
-      requestBurst(burstCounter, math.max(minDelay, delay - delayStep)) //Decrease the delay.
+      Behaviors.same
 
-    case HostQueue.Unavailable | AskFailure if burstCounter < burstLength =>
+    case HostQueue.Unavailable(until) if burstCounter < burstLength =>
+      //Continue the current request burst:
+      val smallerInstant = if until.isBefore(smallestSeenInstant) then until else smallestSeenInstant
       askForUrl()
-      requestBurst(burstCounter + 1, delay)
+      requestBurst(burstCounter + 1, smallerInstant)
 
-    case HostQueue.Unavailable | AskFailure =>
-      timers.startSingleTimer(RequestNext, FiniteDuration(delay, TimeUnit.MILLISECONDS)) //Back off before starting the next request burst.
-      requestBurst(burstCounter, math.min(maxDelay, delay + delayStep)) //Increase the delay.
+    case HostQueue.Unavailable(until) =>
+      //Back off and start a new request burst:
+      val smallerInstant = if until.isBefore(smallestSeenInstant) then until else smallestSeenInstant
+      backOff(smallerInstant)
+      Behaviors.same
+
+    case AskFailure if burstCounter < burstLength =>
+      //Continue the current request burst:
+      askForUrl()
+      requestBurst(burstCounter + 1, smallestSeenInstant)
+
+    case AskFailure =>
+      //Back off and start a new request burst:
+      backOff(smallestSeenInstant)
+      Behaviors.same
   })
 }

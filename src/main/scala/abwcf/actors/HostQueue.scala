@@ -33,7 +33,7 @@ object HostQueue { //TODO: HostQueues are not persisted so they reset after shar
 
   sealed trait Reply
   case class Head(page: PageEntity) extends Reply
-  case object Unavailable extends Reply
+  case class Unavailable(until: Instant) extends Reply
 
   def apply(shard: ActorRef[ClusterSharding.ShardCommand]): Behavior[Command] = Behaviors.setup(context => {
     new HostQueue(shard, context).emptyQueue(Instant.MIN)
@@ -79,7 +79,7 @@ private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
         }
 
       case GetHead(replyTo) =>
-        replyTo ! Unavailable
+        replyTo ! Unavailable(crawlDelayEnd)
         Behaviors.same
 
       case Passivate =>
@@ -95,7 +95,7 @@ private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
       case Enqueue(page) => queue(Queue(page), crawlDelayEnd)
 
       case GetHead(replyTo) =>
-        replyTo ! Unavailable
+        replyTo ! Unavailable(Instant.MAX)
         Behaviors.same
 
       case Passivate =>
