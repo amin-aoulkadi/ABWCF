@@ -21,12 +21,11 @@ object PageRestorer {
 
   private type CombinedCommand = Command | PagePersistence.ResultSeq
 
-  def apply(pagePersistenceManager: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+  def apply(pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]], pagePersistenceManager: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withTimers(timers => {
       val config = context.system.settings.config
       val initialDelay = config.getDuration("abwcf.page-restorer.initial-delay").toScala
       val restoreDelay = config.getDuration("abwcf.page-restorer.restore-delay").toScala
-      val pageShardRegion = Page.getShardRegion(context.system, pagePersistenceManager)
 
       //Periodically attempt to restore pages:
       timers.startTimerWithFixedDelay(RestorePages, initialDelay, restoreDelay)

@@ -8,11 +8,11 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity
 import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, ShardingEnvelope}
 
 import java.time.Instant
-import scala.collection.immutable.Queue
+import scala.collection.mutable
 import scala.jdk.DurationConverters.*
 
 /**
- * Manages the crawl delay for a host.
+ * Manages the crawl delay for a host and sorts pages by crawl priority.
  *
  * There should be exactly one [[HostQueue]] actor per crawled host.
  *
@@ -59,23 +59,25 @@ private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
   private val crawlDelay = config.getDuration("abwcf.host-queue.crawl-delay")
   private val receiveTimeout = config.getDuration("abwcf.host-queue.passivation-receive-timeout").toScala
 
-  private def queue(pages: Queue[PageEntity], crawlDelayEnd: Instant): Behavior[Command] = {
+  private def queue(pages: mutable.PriorityQueue[PageEntity], crawlDelayEnd: Instant): Behavior[Command] = {
     //Disable passivation and register with the receptionist:
     context.cancelReceiveTimeout() //Non-empty HostQueues should not be passivated.
     context.system.receptionist ! Receptionist.Register(HQServiceKey, context.self) //Allows the HostQueueRouter to route messages to this HostQueue.
 
     Behaviors.receiveMessage({
-      case Enqueue(page) => queue(pages.enqueue(page), crawlDelayEnd)
+      case Enqueue(page) =>
+        pages.enqueue(page)
+        Behaviors.same
 
       case GetHead(replyTo) if Instant.now.isAfter(crawlDelayEnd) =>
-        val (head, tail) = pages.dequeue
+        val head = pages.dequeue
         replyTo ! Head(head)
 
-        if (tail.isEmpty) {
+        if (pages.isEmpty) {
           context.system.receptionist ! Receptionist.Deregister(HQServiceKey, context.self) //The HostQueueRouter should stop routing messages to this HostQueue.
           emptyQueue(Instant.now.plus(crawlDelay))
         } else {
-          queue(tail, Instant.now.plus(crawlDelay))
+          queue(pages, Instant.now.plus(crawlDelay))
         }
 
       case GetHead(replyTo) =>
@@ -92,7 +94,9 @@ private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation. Empty HostQueues can be passivated (but not immediately as there may still be messages in the mailbox).
 
     Behaviors.receiveMessage({
-      case Enqueue(page) => queue(Queue(page), crawlDelayEnd)
+      case Enqueue(page) =>
+        val pages = mutable.PriorityQueue(page)(using Ordering.by(_.crawlPriority))
+        queue(pages, crawlDelayEnd)
 
       case GetHead(replyTo) =>
         replyTo ! Unavailable(Instant.MAX)

@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.{PageEntity, PageStatus}
+import abwcf.PageCandidate
 import com.typesafe.config.ConfigFactory
 import org.apache.pekko.actor.testkit.typed.scaladsl.{BehaviorTestKit, TestInbox}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -21,8 +21,8 @@ class UrlNormalizerSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
   private val testKit = BehaviorTestKit(UrlNormalizer(inbox.ref), "testkit", config)
 
   def test(input: String, expectedResult: String): Unit = {
-    testKit.run(UrlNormalizer.Normalize(PageEntity(input, PageStatus.Unknown, 0)))
-    inbox.expectMessage(UrlFilter.Filter(PageEntity(expectedResult, PageStatus.Unknown, 0)))
+    testKit.run(UrlNormalizer.Normalize(PageCandidate(input, 0)))
+    inbox.expectMessage(UrlFilter.Filter(PageCandidate(expectedResult, 0)))
   }
 
   "UrlNormalizer" should "not change URLs that are already in normal form" in {

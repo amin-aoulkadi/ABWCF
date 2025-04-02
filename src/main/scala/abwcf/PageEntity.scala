@@ -1,11 +1,12 @@
 package abwcf
 
 enum PageStatus {
-  case Unknown, Discovered, Processed
+  case Discovered, Processed
 }
 
-case class PageEntity(
-                      url: String,
-                      status: PageStatus,
-                      crawlDepth: Int
-                    )
+case class PageEntity( //TODO: Page
+                       url: String,
+                       status: PageStatus,
+                       crawlDepth: Int,
+                       crawlPriority: Int
+                     )

@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.PageEntity
+import abwcf.PageCandidate
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 
@@ -18,7 +18,7 @@ import scala.util.matching.Regex
  */
 object UrlFilter {
   sealed trait Command
-  case class Filter(page: PageEntity) extends Command
+  case class Filter(page: PageCandidate) extends Command
 
   def apply(pageManager: ActorRef[PageManager.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config

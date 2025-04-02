@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.{FetchResponse, PageEntity, PageStatus}
+import abwcf.{FetchResponse, PageCandidate, PageEntity}
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
@@ -113,7 +113,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = getRedirectUrl(response, page.url)
       pageManager ! PageManager.FetchRedirect(page, response.status, redirectTo)
-      redirectTo.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageEntity(url, PageStatus.Unknown, page.crawlDepth))) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
+      redirectTo.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, page.crawlDepth))) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
 
       buffer.unstashAll(requestNextUrl())
 

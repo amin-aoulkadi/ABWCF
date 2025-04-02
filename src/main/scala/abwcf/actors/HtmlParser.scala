@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.{PageEntity, PageStatus}
+import abwcf.{PageCandidate, PageEntity}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.ByteString
@@ -29,7 +29,7 @@ object HtmlParser {
         .filter(_.startsWith("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
         .toScala(List)
 
-      urls.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageEntity(url, PageStatus.Unknown, page.crawlDepth + 1))) //Important: The crawl depth increases here.
+      urls.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, page.crawlDepth + 1))) //Important: The crawl depth increases here.
       //TODO: Maybe debounce discovered URLs to eliminate duplicates across multiple responses (e.g. via a custom mailbox for the downstream actor)?
       Behaviors.same
   })

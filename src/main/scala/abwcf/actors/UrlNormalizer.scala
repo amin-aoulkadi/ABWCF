@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.PageEntity
+import abwcf.PageCandidate
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 
@@ -22,7 +22,7 @@ import java.util.Locale
  */
 object UrlNormalizer {
   sealed trait Command
-  case class Normalize(page: PageEntity) extends Command
+  case class Normalize(page: PageCandidate) extends Command
 
   def apply(urlFilter: ActorRef[UrlFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config

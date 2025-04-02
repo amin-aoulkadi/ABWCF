@@ -19,8 +19,9 @@ class SlickPageRepository(implicit val session: SlickSession, val materializer: 
     def url = column[String]("url")
     def status = column[PageStatus]("status")
     def crawlDepth = column[Int]("crawl_depth")
+    def crawlPriority = column[Int]("crawl_priority")
 
-    override def * = (url, status, crawlDepth).mapTo[PageEntity]
+    override def * = (url, status, crawlDepth, crawlPriority).mapTo[PageEntity]
   }
 
   private lazy val pages = TableQuery[PageTable]
@@ -43,9 +44,10 @@ class SlickPageRepository(implicit val session: SlickSession, val materializer: 
     Slick.source(query).runWith(Sink.headOption)
   }
 
-  override def findByStatus(status: PageStatus, limit: Int): Future[Seq[PageEntity]] = {
+  override def findByStatusOrderByCrawlPriorityDesc(status: PageStatus, limit: Int): Future[Seq[PageEntity]] = {
     val query = pages
       .filter(_.status === status)
+      .sortBy(_.crawlPriority.desc)
       .take(limit)
       .result
 

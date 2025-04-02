@@ -1,7 +1,6 @@
 package abwcf.actors
 
-import abwcf.actors.persistence.PagePersistenceManager
-import abwcf.{PageEntity, PageStatus}
+import abwcf.PageCandidate
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
 
@@ -9,34 +8,16 @@ import java.net.URISyntaxException
 
 /**
  * The user guardian actor for the ABWCF.
- * 
+ *
  * There should be exactly one [[Crawler]] actor per node.
  */
 object Crawler {
   sealed trait Command
   case class SeedUrls(urls: Seq[String]) extends Command
-  
+
   def apply(): Behavior[Command] = Behaviors.setup(context => {
-    val pagePersistenceManager = context.spawn(
-      Behaviors.supervise(PagePersistenceManager())
-        .onFailure(SupervisorStrategy.resume), //Restarting would be problematic because the PagePersistenceManager internally creates a SlickSession that has to be closed explicitly.
-      "page-persistence-manager"
-    )
-    
-    val pageRestorer = context.spawn(
-      Behaviors.supervise(PageRestorer(pagePersistenceManager))
-        .onFailure(SupervisorStrategy.resume), //The PageRestorer is stateless, so resuming it is safe.
-      "page-restorer"
-    )
-    
-    val userCodeRunner = context.spawn(
-      Behaviors.supervise(UserCodeRunner(pagePersistenceManager))
-        .onFailure(SupervisorStrategy.resume), //The UserCodeRunner is stateless, so resuming it is safe.
-      "user-code-runner"
-    )
-    
     val pageManager = context.spawn(
-      Behaviors.supervise(PageManager(pagePersistenceManager, userCodeRunner))
+      Behaviors.supervise(PageManager())
         .onFailure(SupervisorStrategy.resume), //The PageManager is stateless, so resuming it is safe.
       "page-manager"
     )
@@ -46,7 +27,7 @@ object Crawler {
         .onFailure(SupervisorStrategy.resume), //The UrlFilter is stateless, so resuming it is safe.
       "url-filter"
     )
-    
+
     val urlNormalizer = context.spawn(
       Behaviors.supervise(UrlNormalizer(urlFilter))
         .onFailure[URISyntaxException](SupervisorStrategy.resume), //The UrlNormalizer is stateless, so resuming it is safe.
@@ -76,10 +57,10 @@ object Crawler {
         .onFailure(SupervisorStrategy.restart),
       "fetcher-manager"
     )
-    
+
     Behaviors.receiveMessage({
       case SeedUrls(urls) =>
-        urls.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageEntity(url, PageStatus.Unknown, 0)))
+        urls.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, 0)))
         Behaviors.same
     })
   })

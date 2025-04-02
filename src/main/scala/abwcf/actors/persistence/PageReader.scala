@@ -26,7 +26,7 @@ object PageReader {
         Behaviors.same
 
       case FindByStatus(status, limit, replyTo) =>
-        context.pipeToSelf(pageRepository.findByStatus(status, limit))({
+        context.pipeToSelf(pageRepository.findByStatusOrderByCrawlPriorityDesc(status, limit))({
           case Success(result) => FindByStatusSuccess(result, replyTo)
           case Failure(throwable) => FutureFailure(throwable)
         })

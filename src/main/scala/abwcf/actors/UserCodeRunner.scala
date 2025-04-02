@@ -20,9 +20,7 @@ object UserCodeRunner {
   case class ProcessRedirect(page: PageEntity, statusCode: StatusCode, redirectTo: Option[String]) extends Command
   case class ProcessError(page: PageEntity, statusCode: StatusCode) extends Command
 
-  def apply(pagePersistenceManager: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup(context => {
-    val pageShardRegion = Page.getShardRegion(context.system, pagePersistenceManager)
-
+  def apply(pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]]): Behavior[Command] = Behaviors.setup(context => {
     Behaviors.receiveMessage({
       case ProcessSuccess(page, response) =>
         //TODO: Provide an API to inject user-defined code.
