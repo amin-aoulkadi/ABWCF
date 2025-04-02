@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.actors.persistence.PagePersistenceManager
+import abwcf.actors.persistence.PagePersistence
 import abwcf.{PageEntity, PageStatus}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -38,14 +38,14 @@ object Page {
 
   def apply(entityContext: EntityContext[Command],
             hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-            persistence: ActorRef[PagePersistenceManager.Command]): Behavior[Command] =
+            persistence: ActorRef[PagePersistence.Command]): Behavior[Command] =
     Behaviors.setup(context => {
       Behaviors.withStash(100)(buffer => {
         new Page(hostQueueShardRegion, persistence, entityContext.shard, context, buffer).recovering(entityContext.entityId)
       })
   })
 
-  def getShardRegion(system: ActorSystem[?], pagePersistenceManager: ActorRef[PagePersistenceManager.Command]): ActorRef[ShardingEnvelope[Command]] = {
+  def getShardRegion(system: ActorSystem[?], pagePersistenceManager: ActorRef[PagePersistence.Command]): ActorRef[ShardingEnvelope[Command]] = {
     val hostQueueShardRegion = HostQueue.getShardRegion(system) //Getting the shard region here (instead of in Page.apply()) significantly reduces spam in the log.
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
@@ -59,7 +59,7 @@ object Page {
 }
 
 private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-                            persistence: ActorRef[PagePersistenceManager.Command],
+                            persistence: ActorRef[PagePersistence.Command],
                             shard: ActorRef[ClusterSharding.ShardCommand],
                             context: ActorContext[Page.Command],
                             buffer: StashBuffer[Page.Command]) {
@@ -77,7 +77,7 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
   }
 
   private def recovering(url: String): Behavior[Command] = {
-    persistence ! PagePersistenceManager.Recover(url)
+    persistence ! PagePersistence.Recover(url)
 
     Behaviors.receiveMessage({
       case RecoveryResult(Some(page)) if page.status == PageStatus.Discovered =>
@@ -98,7 +98,7 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
   private def unknownPage(url: String): Behavior[Command] = Behaviors.receiveMessage({
     case Discover(crawlDepth) =>
       val page = PageEntity(url, PageStatus.Discovered, crawlDepth)
-      persistence ! PagePersistenceManager.Insert(page)
+      persistence ! PagePersistence.Insert(page)
       buffer.unstashAll(inserting(page))
 
     case other =>
@@ -124,7 +124,7 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
       case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
 
       case Success | Redirect | Error =>
-        persistence ! PagePersistenceManager.UpdateStatus(page.url, PageStatus.Processed)
+        persistence ! PagePersistence.UpdateStatus(page.url, PageStatus.Processed)
         updating(page.copy(status = PageStatus.Processed))
 
       case Passivate =>

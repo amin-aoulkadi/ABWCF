@@ -29,10 +29,6 @@ class SlickPageRepository(implicit val session: SlickSession, val materializer: 
     session.db.run(pages += page)
   }
 
-  override def update(page: PageEntity): Future[Int] = {
-    session.db.run(pages.filter(_.url === page.url).update(page))
-  }
-
   override def updateStatus(url: String, status: PageStatus): Future[Int] = {
     val query = pages
       .filter(_.url === url)

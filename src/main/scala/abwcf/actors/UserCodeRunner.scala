@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.actors.persistence.PagePersistenceManager
+import abwcf.actors.persistence.PagePersistence
 import abwcf.{FetchResponse, PageEntity}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
@@ -20,7 +20,7 @@ object UserCodeRunner {
   case class ProcessRedirect(page: PageEntity, statusCode: StatusCode, redirectTo: Option[String]) extends Command
   case class ProcessError(page: PageEntity, statusCode: StatusCode) extends Command
 
-  def apply(pagePersistenceManager: ActorRef[PagePersistenceManager.Command]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(pagePersistenceManager: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup(context => {
     val pageShardRegion = Page.getShardRegion(context.system, pagePersistenceManager)
 
     Behaviors.receiveMessage({

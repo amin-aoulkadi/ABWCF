@@ -1,7 +1,7 @@
 package abwcf.actors
 
 import abwcf.PageStatus
-import abwcf.actors.persistence.{PagePersistenceManager, PageReader}
+import abwcf.actors.persistence.PagePersistence
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
@@ -19,9 +19,9 @@ object PageRestorer {
   sealed trait Command
   private case object RestorePages extends Command
 
-  private type CombinedCommand = Command | PageReader.ResultSeq
+  private type CombinedCommand = Command | PagePersistence.ResultSeq
 
-  def apply(pagePersistenceManager: ActorRef[PagePersistenceManager.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+  def apply(pagePersistenceManager: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withTimers(timers => {
       val config = context.system.settings.config
       val initialDelay = config.getDuration("abwcf.page-restorer.initial-delay").toScala
@@ -33,10 +33,10 @@ object PageRestorer {
 
       Behaviors.receiveMessage({
         case RestorePages =>
-          pagePersistenceManager ! PagePersistenceManager.FindByStatus(PageStatus.Discovered, 100, context.self)
+          pagePersistenceManager ! PagePersistence.FindByStatus(PageStatus.Discovered, 100, context.self)
           Behaviors.same
 
-        case PageReader.ResultSeq(pages) =>
+        case PagePersistence.ResultSeq(pages) =>
           context.log.info("Restoring {} discovered pages (some may already be active)", pages.size)
           pages.foreach(page => pageShardRegion ! ShardingEnvelope(page.url, Page.RecoveryResult(Some(page))))
           Behaviors.same
