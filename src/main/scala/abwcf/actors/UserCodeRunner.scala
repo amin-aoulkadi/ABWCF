@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.{FetchResponse, Page}
+import abwcf.data.{FetchResponse, Page}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope

@@ -1,4 +1,4 @@
-package abwcf
+package abwcf.data
 
 enum PageStatus {
   case Discovered, Processed

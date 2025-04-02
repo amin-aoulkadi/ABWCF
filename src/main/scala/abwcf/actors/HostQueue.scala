@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.Page
+import abwcf.data.Page
 import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}

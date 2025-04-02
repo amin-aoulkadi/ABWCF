@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.{FetchResponse, PageCandidate, Page}
+import abwcf.data.{FetchResponse, Page, PageCandidate}
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}

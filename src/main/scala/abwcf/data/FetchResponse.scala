@@ -1,4 +1,4 @@
-package abwcf
+package abwcf.data
 
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.util.ByteString

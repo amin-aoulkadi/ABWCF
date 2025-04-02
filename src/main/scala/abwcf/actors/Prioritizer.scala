@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.PageCandidate
+import abwcf.data.PageCandidate
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
@@ -8,7 +8,7 @@ import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import scala.util.Random
 
 /**
- * Assigns crawl priorities to pages.
+ * Assigns crawl priorities to [[PageCandidate]]s.
  *
  * There should be one [[Prioritizer]] actor per node.
  *

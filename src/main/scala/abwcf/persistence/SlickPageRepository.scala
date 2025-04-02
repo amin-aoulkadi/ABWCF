@@ -1,6 +1,6 @@
 package abwcf.persistence
 
-import abwcf.{Page, PageStatus}
+import abwcf.data.{Page, PageStatus}
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.connectors.slick.scaladsl.{Slick, SlickSession}
 import org.apache.pekko.stream.scaladsl.Sink

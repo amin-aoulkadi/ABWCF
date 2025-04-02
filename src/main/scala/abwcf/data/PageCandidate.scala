@@ -1,4 +1,4 @@
-package abwcf
+package abwcf.data
 
 /**
  * A URL that has not been normalized, filtered, deduplicated and prioritized yet.

@@ -1,6 +1,6 @@
 package abwcf.actors.persistence
 
-import abwcf.{Page, PageStatus}
+import abwcf.data.{Page, PageStatus}
 import org.apache.pekko.actor.typed.ActorRef
 
 /**

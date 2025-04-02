@@ -1,7 +1,7 @@
 package abwcf.actors
 
 import abwcf.actors.persistence.{PagePersistence, PagePersistenceManager}
-import abwcf.{FetchResponse, PageCandidate, Page}
+import abwcf.data.{FetchResponse, Page, PageCandidate}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope

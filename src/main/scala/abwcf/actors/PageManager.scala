@@ -1,7 +1,7 @@
 package abwcf.actors
 
 import abwcf.actors.persistence.PagePersistence
-import abwcf.{PageCandidate, Page, PageStatus}
+import abwcf.data.{Page, PageCandidate, PageStatus}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityContext, EntityTypeKey}

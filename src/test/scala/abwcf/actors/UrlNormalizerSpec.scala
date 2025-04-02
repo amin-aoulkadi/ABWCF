@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.PageCandidate
+import abwcf.data.PageCandidate
 import com.typesafe.config.ConfigFactory
 import org.apache.pekko.actor.testkit.typed.scaladsl.{BehaviorTestKit, TestInbox}
 import org.scalatest.flatspec.AnyFlatSpec

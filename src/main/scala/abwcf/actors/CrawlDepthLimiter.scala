@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.Page
+import abwcf.data.Page
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.ByteString

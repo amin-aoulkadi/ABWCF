@@ -1,6 +1,6 @@
 package abwcf.persistence
 
-import abwcf.{Page, PageStatus}
+import abwcf.data.{Page, PageStatus}
 
 import scala.concurrent.Future
 

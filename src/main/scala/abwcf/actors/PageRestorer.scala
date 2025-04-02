@@ -1,7 +1,7 @@
 package abwcf.actors
 
-import abwcf.PageStatus
 import abwcf.actors.persistence.PagePersistence
+import abwcf.data.PageStatus
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
