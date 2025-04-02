@@ -17,7 +17,7 @@ object Crawler {
 
   def apply(): Behavior[Command] = Behaviors.setup(context => {
     val pageManager = context.spawn(
-      Behaviors.supervise(PageManager())
+      Behaviors.supervise(PageGateway())
         .onFailure(SupervisorStrategy.resume), //The PageManager is stateless, so resuming it is safe.
       "page-manager"
     )

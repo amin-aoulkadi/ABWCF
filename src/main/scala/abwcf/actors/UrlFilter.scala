@@ -20,7 +20,7 @@ object UrlFilter {
   sealed trait Command
   case class Filter(page: PageCandidate) extends Command
 
-  def apply(pageManager: ActorRef[PageManager.Command]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(pageManager: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
     val maxUrlLength = config.getInt("abwcf.url-filter.max-url-length")
 
@@ -39,7 +39,7 @@ object UrlFilter {
           val existsForbiddenMatch = mustNotMatch.exists(_.matches(page.url))
 
           if (existsRequiredMatch && !existsForbiddenMatch) {
-            pageManager ! PageManager.Discover(page)
+            pageManager ! PageGateway.Discover(page)
           }
         }
 

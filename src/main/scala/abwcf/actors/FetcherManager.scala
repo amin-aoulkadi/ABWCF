@@ -26,7 +26,7 @@ object FetcherManager {
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
-            pageManager: ActorRef[PageManager.Command],
+            pageManager: ActorRef[PageGateway.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] =
     Behaviors.setup[CombinedCommand](context => {
       Behaviors.withTimers(timers => {
@@ -44,7 +44,7 @@ object FetcherManager {
 
 private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
                                       hostQueueRouter: ActorRef[HostQueue.Command],
-                                      pageManager: ActorRef[PageManager.Command],
+                                      pageManager: ActorRef[PageGateway.Command],
                                       urlNormalizer: ActorRef[UrlNormalizer.Command],
                                       context: ActorContext[FetcherManager.CombinedCommand]) {
   import FetcherManager.*

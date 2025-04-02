@@ -39,14 +39,14 @@ object Page { //TODO: PageManager or PageActor
 
   def apply(entityContext: EntityContext[Command],
             hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-            pageManager: ActorRef[PageManager.CombinedCommand]): Behavior[Command] =
+            pageManager: ActorRef[PageGateway.CombinedCommand]): Behavior[Command] =
     Behaviors.setup(context => {
       Behaviors.withStash(100)(buffer => {
         new Page(hostQueueShardRegion, pageManager, entityContext.shard, context, buffer).recovering(entityContext.entityId)
       })
   })
 
-  def getShardRegion(system: ActorSystem[?], pageManager: ActorRef[PageManager.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
+  def getShardRegion(system: ActorSystem[?], pageManager: ActorRef[PageGateway.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
     val hostQueueShardRegion = HostQueue.getShardRegion(system) //Getting the shard region here (instead of in Page.apply()) significantly reduces spam in the log.
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
@@ -60,7 +60,7 @@ object Page { //TODO: PageManager or PageActor
 }
 
 private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-                            pageManager: ActorRef[PageManager.CombinedCommand],
+                            pageManager: ActorRef[PageGateway.CombinedCommand],
                             shard: ActorRef[ClusterSharding.ShardCommand],
                             context: ActorContext[Page.Command],
                             buffer: StashBuffer[Page.Command]) {

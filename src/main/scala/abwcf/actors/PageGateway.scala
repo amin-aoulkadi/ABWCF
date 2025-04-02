@@ -8,13 +8,13 @@ import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.http.scaladsl.model.StatusCode
 
 /**
- * Orchestrates certain interactions with [[Page]] actors.
+ * Gateway between [[Page]] actors and non-sharded actors.
  *
- * There should be one [[PageManager]] actor per node.
+ * There should be one [[PageGateway]] actor per node.
  *
  * This actor is stateless.
  */
-object PageManager { //TODO: PageGateway
+object PageGateway {
   sealed trait Command
   case class Discover(page: PageCandidate) extends Command
   case class FetchSuccess(page: PageEntity, response: FetchResponse) extends Command
