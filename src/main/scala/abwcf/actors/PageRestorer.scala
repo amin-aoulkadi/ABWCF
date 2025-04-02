@@ -21,7 +21,7 @@ object PageRestorer {
 
   private type CombinedCommand = Command | PagePersistence.ResultSeq
 
-  def apply(pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]], pagePersistenceManager: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+  def apply(pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]], pagePersistenceManager: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withTimers(timers => {
       val config = context.system.settings.config
       val initialDelay = config.getDuration("abwcf.page-restorer.initial-delay").toScala
@@ -37,7 +37,7 @@ object PageRestorer {
 
         case PagePersistence.ResultSeq(pages) =>
           context.log.info("Restoring {} discovered pages (some may already be active)", pages.size)
-          pages.foreach(page => pageShardRegion ! ShardingEnvelope(page.url, Page.RecoveryResult(Some(page))))
+          pages.foreach(page => pageShardRegion ! ShardingEnvelope(page.url, PageManager.RecoveryResult(Some(page))))
           Behaviors.same
       })
     })

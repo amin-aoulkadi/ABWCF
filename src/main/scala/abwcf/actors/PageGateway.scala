@@ -8,7 +8,7 @@ import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.http.scaladsl.model.StatusCode
 
 /**
- * Gateway between [[Page]] actors and non-sharded actors.
+ * Gateway between [[PageManager]] actors and non-sharded actors.
  *
  * There should be one [[PageGateway]] actor per node.
  *
@@ -24,7 +24,7 @@ object PageGateway {
   type CombinedCommand = Command | PagePersistence.Command | Prioritizer.Command
 
   def apply(): Behavior[CombinedCommand] = Behaviors.setup(context => {
-    val pageShardRegion = Page.getShardRegion(context.system, context.self)
+    val pageShardRegion = PageManager.getShardRegion(context.system, context.self)
 
     val prioritizer = context.spawn(
       Behaviors.supervise(Prioritizer(pageShardRegion))
@@ -52,7 +52,7 @@ object PageGateway {
 
     Behaviors.receiveMessage({
       case Discover(page) => //TODO: Add database lookup (with a small cache).
-        pageShardRegion ! ShardingEnvelope(page.url, Page.Discover(page.crawlDepth))
+        pageShardRegion ! ShardingEnvelope(page.url, PageManager.Discover(page.crawlDepth))
         Behaviors.same
 
       case FetchSuccess(page, response) =>

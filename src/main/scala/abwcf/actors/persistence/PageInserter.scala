@@ -1,6 +1,6 @@
 package abwcf.actors.persistence
 
-import abwcf.actors.Page
+import abwcf.actors.PageManager
 import abwcf.actors.persistence.PagePersistence.Insert
 import abwcf.persistence.PageRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
@@ -14,7 +14,7 @@ object PageInserter { //TODO: Batch inserts.
   private case class FutureSuccess(url: String) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
-  def apply(pageRepository: PageRepository, pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]]): Behavior[Command | PagePersistence.InsertCommand] = Behaviors.setup(context => {
+  def apply(pageRepository: PageRepository, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command | PagePersistence.InsertCommand] = Behaviors.setup(context => {
     Behaviors.receiveMessage({
       case Insert(page) =>
         context.pipeToSelf(pageRepository.insert(page))({
@@ -24,7 +24,7 @@ object PageInserter { //TODO: Batch inserts.
         Behaviors.same
 
       case FutureSuccess(url) =>
-        pageShardRegion ! ShardingEnvelope(url, Page.InsertSuccess)
+        pageShardRegion ! ShardingEnvelope(url, PageManager.InsertSuccess)
         Behaviors.same
 
       case FutureFailure(throwable) =>

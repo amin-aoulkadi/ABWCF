@@ -1,7 +1,7 @@
 package abwcf.actors.persistence
 
 import abwcf.PageEntity
-import abwcf.actors.Page
+import abwcf.actors.PageManager
 import abwcf.actors.persistence.PagePersistence.{FindByStatus, Recover, ResultSeq}
 import abwcf.persistence.PageRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
@@ -16,7 +16,7 @@ object PageReader {
   private case class FindByStatusSuccess(result: Seq[PageEntity], replyTo: ActorRef[ResultSeq]) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
-  def apply(pageRepository: PageRepository, pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]]): Behavior[Command | PagePersistence.ReadCommand] = Behaviors.setup(context => {
+  def apply(pageRepository: PageRepository, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command | PagePersistence.ReadCommand] = Behaviors.setup(context => {
     Behaviors.receiveMessage({
       case Recover(url) =>
         context.pipeToSelf(pageRepository.findByUrl(url))({
@@ -33,7 +33,7 @@ object PageReader {
         Behaviors.same
 
       case RecoverSuccess(result, replyToUrl) =>
-        pageShardRegion ! ShardingEnvelope(replyToUrl, Page.RecoveryResult(result))
+        pageShardRegion ! ShardingEnvelope(replyToUrl, PageManager.RecoveryResult(result))
         Behaviors.same
 
       case FindByStatusSuccess(result, replyTo) =>

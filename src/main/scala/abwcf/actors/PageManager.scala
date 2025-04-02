@@ -13,7 +13,7 @@ import scala.jdk.DurationConverters.*
 /**
  * Represents a page to be crawled.
  *
- * There should be exactly one [[Page]] actor per page.
+ * There should be exactly one [[PageManager]] actor per page.
  *
  * This actor is stateful, sharded, gracefully passivated and persisted.
  *
@@ -21,8 +21,8 @@ import scala.jdk.DurationConverters.*
  *
  * This entity will not be remembered (even if remembering entities is enabled).
  */
-object Page { //TODO: PageManager or PageActor
-  val TypeKey: EntityTypeKey[Command] = EntityTypeKey("Page")
+object PageManager {
+  val TypeKey: EntityTypeKey[Command] = EntityTypeKey("PageManager")
 
   sealed trait Command
   case class Discover(crawlDepth: Int) extends Command
@@ -42,7 +42,7 @@ object Page { //TODO: PageManager or PageActor
             pageManager: ActorRef[PageGateway.CombinedCommand]): Behavior[Command] =
     Behaviors.setup(context => {
       Behaviors.withStash(100)(buffer => {
-        new Page(hostQueueShardRegion, pageManager, entityContext.shard, context, buffer).recovering(entityContext.entityId)
+        new PageManager(hostQueueShardRegion, pageManager, entityContext.shard, context, buffer).recovering(entityContext.entityId)
       })
   })
 
@@ -53,18 +53,18 @@ object Page { //TODO: PageManager or PageActor
       .withNoPassivationStrategy() //Disable automatic passivation.
 
     ClusterSharding(system).init(
-      Entity(TypeKey)(entityContext => Page(entityContext, hostQueueShardRegion, pageManager))
+      Entity(TypeKey)(entityContext => PageManager(entityContext, hostQueueShardRegion, pageManager))
         .withSettings(settings)
     )
   }
 }
 
-private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-                            pageManager: ActorRef[PageGateway.CombinedCommand],
-                            shard: ActorRef[ClusterSharding.ShardCommand],
-                            context: ActorContext[Page.Command],
-                            buffer: StashBuffer[Page.Command]) {
-  import Page.*
+private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
+                                  pageManager: ActorRef[PageGateway.CombinedCommand],
+                                  shard: ActorRef[ClusterSharding.ShardCommand],
+                                  context: ActorContext[PageManager.Command],
+                                  buffer: StashBuffer[PageManager.Command]) {
+  import PageManager.*
 
   private val config = context.system.settings.config
   private val receiveTimeout = config.getDuration("abwcf.page.passivation-receive-timeout").toScala
@@ -83,7 +83,7 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
     Behaviors.receiveMessage({
       case RecoveryResult(None) =>
         buffer.unstashAll(newPage(url))
-        
+
       case RecoveryResult(Some(page)) if page.status == PageStatus.Discovered =>
         buffer.unstashAll(discoveredPage(page))
 
@@ -105,10 +105,10 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
       buffer.stash(other)
       Behaviors.same
   })
-  
+
   private def prioritizing(candidate: PageCandidate): Behavior[Command] = {
     pageManager ! Prioritizer.Prioritize(candidate)
-    
+
     Behaviors.receiveMessage({
       case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
 
@@ -124,7 +124,7 @@ private class Page private (hostQueueShardRegion: ActorRef[ShardingEnvelope[Host
 
   private def inserting(page: PageEntity): Behavior[Command] = {
     pageManager ! PagePersistence.Insert(page)
-    
+
     Behaviors.receiveMessage({
       case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
       case InsertSuccess => buffer.unstashAll(discoveredPage(page))

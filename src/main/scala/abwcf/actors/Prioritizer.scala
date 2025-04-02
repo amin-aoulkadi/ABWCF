@@ -20,10 +20,10 @@ object Prioritizer {
 
 //  private var sequenceNumber = Int.MaxValue
 
-  def apply(pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]]): Behavior[Command] = Behaviors.receiveMessage({
+  def apply(pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command] = Behaviors.receiveMessage({
     case Prioritize(page) =>
       val priority = Random.nextInt() //TODO: Provide an API to inject user-defined code.
-      pageShardRegion ! ShardingEnvelope(page.url, Page.SetPriority(priority))
+      pageShardRegion ! ShardingEnvelope(page.url, PageManager.SetPriority(priority))
 //      pageShardRegion ! ShardingEnvelope(page.url, Page.SetPriority(sequenceNumber))
 //      sequenceNumber = sequenceNumber - 1
       Behaviors.same

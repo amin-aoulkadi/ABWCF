@@ -1,6 +1,6 @@
 package abwcf.actors.persistence
 
-import abwcf.actors.Page
+import abwcf.actors.PageManager
 import abwcf.actors.persistence.PagePersistence.UpdateStatus
 import abwcf.persistence.PageRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
@@ -14,7 +14,7 @@ object PageUpdater {
   private case class FutureSuccess(url: String) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
-  def apply(pageRepository: PageRepository, pageShardRegion: ActorRef[ShardingEnvelope[Page.Command]]): Behavior[Command | PagePersistence.UpdateCommand] = Behaviors.setup(context => {
+  def apply(pageRepository: PageRepository, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command | PagePersistence.UpdateCommand] = Behaviors.setup(context => {
     Behaviors.receiveMessage({
       case UpdateStatus(url, status) =>
         context.pipeToSelf(pageRepository.updateStatus(url, status))({
@@ -24,7 +24,7 @@ object PageUpdater {
         Behaviors.same
 
       case FutureSuccess(url) =>
-        pageShardRegion ! ShardingEnvelope(url, Page.UpdateSuccess)
+        pageShardRegion ! ShardingEnvelope(url, PageManager.UpdateSuccess)
         Behaviors.same
 
       case FutureFailure(throwable) =>

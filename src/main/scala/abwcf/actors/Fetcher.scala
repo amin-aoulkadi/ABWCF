@@ -99,7 +99,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     case FutureSuccess(response: HttpResponse) if response.status.isFailure =>
       context.log.info("Received {} for {}", response.status.toString, page.url)
 
-      //Discard the response entity and notify the Page:
+      //Discard the response entity and notify the PageManager:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       pageManager ! PageGateway.FetchError(page, response.status)
 
@@ -109,7 +109,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     case FutureSuccess(response: HttpResponse) if response.status.isRedirection =>
       context.log.info("Received {} for {}", response.status.toString, page.url)
 
-      //Discard the response entity, notify the Page and send the redirect URL to the UrlNormalizer:
+      //Discard the response entity, notify the PageManager and send the redirect URL to the UrlNormalizer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = getRedirectUrl(response, page.url)
       pageManager ! PageGateway.FetchRedirect(page, response.status, redirectTo)
