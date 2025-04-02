@@ -1,6 +1,6 @@
 package abwcf.persistence
 
-import abwcf.{PageEntity, PageStatus}
+import abwcf.{Page, PageStatus}
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.connectors.slick.scaladsl.{Slick, SlickSession}
 import org.apache.pekko.stream.scaladsl.Sink
@@ -15,18 +15,18 @@ class SlickPageRepository(implicit val session: SlickSession, val materializer: 
     string => PageStatus.valueOf(string)
   )
 
-  private class PageTable(tag: Tag) extends Table[PageEntity](tag, None, "pages") {
+  private class PageTable(tag: Tag) extends Table[Page](tag, None, "pages") {
     def url = column[String]("url")
     def status = column[PageStatus]("status")
     def crawlDepth = column[Int]("crawl_depth")
     def crawlPriority = column[Int]("crawl_priority")
 
-    override def * = (url, status, crawlDepth, crawlPriority).mapTo[PageEntity]
+    override def * = (url, status, crawlDepth, crawlPriority).mapTo[Page]
   }
 
   private lazy val pages = TableQuery[PageTable]
 
-  override def insert(page: PageEntity): Future[Int] = {
+  override def insert(page: Page): Future[Int] = {
     session.db.run(pages += page)
   }
 
@@ -39,12 +39,12 @@ class SlickPageRepository(implicit val session: SlickSession, val materializer: 
     session.db.run(query)
   }
 
-  override def findByUrl(url: String): Future[Option[PageEntity]] = {
+  override def findByUrl(url: String): Future[Option[Page]] = {
     val query = pages.filter(_.url === url).result
     Slick.source(query).runWith(Sink.headOption)
   }
 
-  override def findByStatusOrderByCrawlPriorityDesc(status: PageStatus, limit: Int): Future[Seq[PageEntity]] = {
+  override def findByStatusOrderByCrawlPriorityDesc(status: PageStatus, limit: Int): Future[Seq[Page]] = {
     val query = pages
       .filter(_.status === status)
       .sortBy(_.crawlPriority.desc)

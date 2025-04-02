@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.{PageCandidate, PageEntity}
+import abwcf.{PageCandidate, Page}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.ByteString
@@ -17,7 +17,7 @@ import scala.jdk.StreamConverters.StreamHasToScala
  */
 object HtmlParser {
   sealed trait Command
-  case class Parse(page: PageEntity, responseBody: ByteString) extends Command
+  case class Parse(page: Page, responseBody: ByteString) extends Command
 
   def apply(urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] = Behaviors.receiveMessage({
     case Parse(page, responseBody) =>

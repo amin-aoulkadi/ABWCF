@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.PageEntity
+import abwcf.Page
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.ByteString
@@ -14,7 +14,7 @@ import org.apache.pekko.util.ByteString
  */
 object CrawlDepthLimiter {
   sealed trait Command
-  case class CheckDepth(page: PageEntity, responseBody: ByteString) extends Command
+  case class CheckDepth(page: Page, responseBody: ByteString) extends Command
 
   def apply(htmlParser: ActorRef[HtmlParser.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config

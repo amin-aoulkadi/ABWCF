@@ -1,6 +1,6 @@
 package abwcf.actors.persistence
 
-import abwcf.{PageEntity, PageStatus}
+import abwcf.{Page, PageStatus}
 import org.apache.pekko.actor.typed.ActorRef
 
 /**
@@ -10,7 +10,7 @@ object PagePersistence {
   sealed trait Command
   
   sealed trait InsertCommand extends Command
-  case class Insert(page: PageEntity) extends InsertCommand
+  case class Insert(page: Page) extends InsertCommand
   
   sealed trait ReadCommand extends Command
   case class FindByStatus(status: PageStatus, limit: Int, replyTo: ActorRef[ResultSeq]) extends ReadCommand
@@ -20,5 +20,5 @@ object PagePersistence {
   case class UpdateStatus(url: String, status: PageStatus) extends UpdateCommand
 
   sealed trait Reply
-  case class ResultSeq(result: Seq[PageEntity]) extends Reply
+  case class ResultSeq(result: Seq[Page]) extends Reply
 }

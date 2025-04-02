@@ -1,6 +1,6 @@
 package abwcf.actors.persistence
 
-import abwcf.PageEntity
+import abwcf.Page
 import abwcf.actors.PageManager
 import abwcf.actors.persistence.PagePersistence.{FindByStatus, Recover, ResultSeq}
 import abwcf.persistence.PageRepository
@@ -12,8 +12,8 @@ import scala.util.{Failure, Success}
 
 object PageReader {
   sealed trait Command
-  private case class RecoverSuccess(result: Option[PageEntity], replyToUrl: String) extends Command
-  private case class FindByStatusSuccess(result: Seq[PageEntity], replyTo: ActorRef[ResultSeq]) extends Command
+  private case class RecoverSuccess(result: Option[Page], replyToUrl: String) extends Command
+  private case class FindByStatusSuccess(result: Seq[Page], replyTo: ActorRef[ResultSeq]) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
   def apply(pageRepository: PageRepository, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command | PagePersistence.ReadCommand] = Behaviors.setup(context => {

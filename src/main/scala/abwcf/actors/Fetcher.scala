@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.{FetchResponse, PageCandidate, PageEntity}
+import abwcf.{FetchResponse, PageCandidate, Page}
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
@@ -28,7 +28,7 @@ object Fetcher {
   private val ParseableMediaTypes = List(MediaTypes.`text/html`, MediaTypes.`application/xhtml+xml`)
 
   sealed trait Command
-  case class Fetch(page: PageEntity) extends Command
+  case class Fetch(page: Page) extends Command
   case object Stop extends Command
   private case class FutureSuccess(value: HttpResponse | ByteString) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
@@ -94,7 +94,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     })
   }
 
-  private def receiveHttpResponse(page: PageEntity, response: HttpResponse): Behavior[Command] = Behaviors.receiveMessage({
+  private def receiveHttpResponse(page: Page, response: HttpResponse): Behavior[Command] = Behaviors.receiveMessage({
     //Handle 4xx and 5xx error responses:
     case FutureSuccess(response: HttpResponse) if response.status.isFailure =>
       context.log.info("Received {} for {}", response.status.toString, page.url)

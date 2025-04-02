@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.{FetchResponse, PageEntity}
+import abwcf.{FetchResponse, Page}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
@@ -15,9 +15,9 @@ import org.apache.pekko.http.scaladsl.model.StatusCode
  */
 object UserCodeRunner {
   sealed trait Command
-  case class ProcessSuccess(page: PageEntity, response: FetchResponse) extends Command
-  case class ProcessRedirect(page: PageEntity, statusCode: StatusCode, redirectTo: Option[String]) extends Command
-  case class ProcessError(page: PageEntity, statusCode: StatusCode) extends Command
+  case class ProcessSuccess(page: Page, response: FetchResponse) extends Command
+  case class ProcessRedirect(page: Page, statusCode: StatusCode, redirectTo: Option[String]) extends Command
+  case class ProcessError(page: Page, statusCode: StatusCode) extends Command
 
   def apply(pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command] = Behaviors.setup(context => {
     Behaviors.receiveMessage({

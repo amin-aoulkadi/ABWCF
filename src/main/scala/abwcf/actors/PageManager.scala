@@ -1,7 +1,7 @@
 package abwcf.actors
 
 import abwcf.actors.persistence.PagePersistence
-import abwcf.{PageCandidate, PageEntity, PageStatus}
+import abwcf.{PageCandidate, Page, PageStatus}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityContext, EntityTypeKey}
@@ -33,7 +33,7 @@ object PageManager {
   private case object Passivate extends Command
 
   sealed trait PersistenceCommand extends Command //These have to be part of the public protocol so that they work with ShardingEnvelopes.
-  case class RecoveryResult(result: Option[PageEntity]) extends PersistenceCommand
+  case class RecoveryResult(result: Option[Page]) extends PersistenceCommand
   case object InsertSuccess extends PersistenceCommand
   case object UpdateSuccess extends PersistenceCommand
 
@@ -72,7 +72,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
   /**
    * Adds the URL to a [[HostQueue]] so that it can be fetched.
    */
-  private def addToHostQueue(page: PageEntity): Unit = {
+  private def addToHostQueue(page: Page): Unit = {
     val host = URI(page.url).getHost
     hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(page))
   }
@@ -113,7 +113,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
       case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
 
       case SetPriority(priority) =>
-        val page = PageEntity(candidate.url, PageStatus.Discovered, candidate.crawlDepth, priority)
+        val page = Page(candidate.url, PageStatus.Discovered, candidate.crawlDepth, priority)
         buffer.unstashAll(inserting(page))
 
       case other =>
@@ -122,7 +122,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
     })
   }
 
-  private def inserting(page: PageEntity): Behavior[Command] = {
+  private def inserting(page: Page): Behavior[Command] = {
     pageManager ! PagePersistence.Insert(page)
 
     Behaviors.receiveMessage({
@@ -135,7 +135,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
     })
   }
 
-  private def discoveredPage(page: PageEntity): Behavior[Command] = {
+  private def discoveredPage(page: Page): Behavior[Command] = {
     addToHostQueue(page)
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
 
@@ -153,7 +153,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
     })
   }
 
-  private def updating(page: PageEntity): Behavior[Command] = Behaviors.receiveMessage({
+  private def updating(page: Page): Behavior[Command] = Behaviors.receiveMessage({
     case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
     case UpdateSuccess => buffer.unstashAll(processedPage(page))
 
@@ -162,7 +162,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
       Behaviors.same
   })
 
-  private def processedPage(page: PageEntity): Behavior[Command] = {
+  private def processedPage(page: Page): Behavior[Command] = {
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
 
     Behaviors.receiveMessage({

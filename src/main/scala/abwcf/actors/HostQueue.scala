@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.PageEntity
+import abwcf.Page
 import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -27,12 +27,12 @@ object HostQueue { //TODO: HostQueues are not persisted so they reset after shar
   val HQServiceKey: ServiceKey[Command] = ServiceKey("HostQueue")
 
   sealed trait Command
-  case class Enqueue(page: PageEntity) extends Command
+  case class Enqueue(page: Page) extends Command
   case class GetHead(replyTo: ActorRef[Reply]) extends Command
   private case object Passivate extends Command
 
   sealed trait Reply
-  case class Head(page: PageEntity) extends Reply
+  case class Head(page: Page) extends Reply
   case class Unavailable(until: Instant) extends Reply
 
   def apply(shard: ActorRef[ClusterSharding.ShardCommand]): Behavior[Command] = Behaviors.setup(context => {
@@ -59,7 +59,7 @@ private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
   private val crawlDelay = config.getDuration("abwcf.host-queue.crawl-delay")
   private val receiveTimeout = config.getDuration("abwcf.host-queue.passivation-receive-timeout").toScala
 
-  private def queue(pages: mutable.PriorityQueue[PageEntity], crawlDelayEnd: Instant): Behavior[Command] = {
+  private def queue(pages: mutable.PriorityQueue[Page], crawlDelayEnd: Instant): Behavior[Command] = {
     //Disable passivation and register with the receptionist:
     context.cancelReceiveTimeout() //Non-empty HostQueues should not be passivated.
     context.system.receptionist ! Receptionist.Register(HQServiceKey, context.self) //Allows the HostQueueRouter to route messages to this HostQueue.

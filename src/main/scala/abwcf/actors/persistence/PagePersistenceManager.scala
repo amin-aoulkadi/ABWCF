@@ -10,7 +10,7 @@ import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.connectors.slick.scaladsl.SlickSession
 
 /**
- * Manages communication with the [[abwcf.PageEntity]] database.
+ * Manages communication with the [[abwcf.Page]] database.
  * 
  * There should be one [[PagePersistenceManager]] actor per node.
  * 

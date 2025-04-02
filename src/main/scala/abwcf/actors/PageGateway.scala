@@ -1,7 +1,7 @@
 package abwcf.actors
 
 import abwcf.actors.persistence.{PagePersistence, PagePersistenceManager}
-import abwcf.{FetchResponse, PageCandidate, PageEntity}
+import abwcf.{FetchResponse, PageCandidate, Page}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
@@ -16,10 +16,10 @@ import org.apache.pekko.http.scaladsl.model.StatusCode
  */
 object PageGateway {
   sealed trait Command
-  case class Discover(page: PageCandidate) extends Command
-  case class FetchSuccess(page: PageEntity, response: FetchResponse) extends Command
-  case class FetchRedirect(page: PageEntity, statusCode: StatusCode, redirectTo: Option[String]) extends Command
-  case class FetchError(page: PageEntity, statusCode: StatusCode) extends Command
+  case class Discover(candidate: PageCandidate) extends Command
+  case class FetchSuccess(page: Page, response: FetchResponse) extends Command
+  case class FetchRedirect(page: Page, statusCode: StatusCode, redirectTo: Option[String]) extends Command
+  case class FetchError(page: Page, statusCode: StatusCode) extends Command
 
   type CombinedCommand = Command | PagePersistence.Command | Prioritizer.Command
 
@@ -51,8 +51,8 @@ object PageGateway {
     )
 
     Behaviors.receiveMessage({
-      case Discover(page) => //TODO: Add database lookup (with a small cache).
-        pageShardRegion ! ShardingEnvelope(page.url, PageManager.Discover(page.crawlDepth))
+      case Discover(candidate) => //TODO: Add database lookup (with a small cache).
+        pageShardRegion ! ShardingEnvelope(candidate.url, PageManager.Discover(candidate.crawlDepth))
         Behaviors.same
 
       case FetchSuccess(page, response) =>
