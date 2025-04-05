@@ -1,11 +1,10 @@
 package abwcf.actors
 
 import abwcf.data.PageCandidate
+import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
-
-import scala.util.Random
 
 /**
  * Assigns crawl priorities to [[PageCandidate]]s.
@@ -18,14 +17,14 @@ object Prioritizer {
   sealed trait Command
   case class Prioritize(candidate: PageCandidate) extends Command
 
-//  private var sequenceNumber = Int.MaxValue
-
-  def apply(pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command] = Behaviors.receiveMessage({
-    case Prioritize(page) =>
-      val priority = Random.nextInt() //TODO: Provide an API to inject user-defined code.
-      pageShardRegion ! ShardingEnvelope(page.url, PageManager.SetPriority(priority))
-//      pageShardRegion ! ShardingEnvelope(page.url, Page.SetPriority(sequenceNumber))
-//      sequenceNumber = sequenceNumber - 1
-      Behaviors.same
-  })
+  def apply(settings: CrawlerSettings, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command] = {
+    val prioritizationFunction = settings.prioritizationFunction
+    
+    Behaviors.receiveMessage({
+      case Prioritize(candidate) =>
+        val priority = prioritizationFunction(candidate)
+        pageShardRegion ! ShardingEnvelope(candidate.url, PageManager.SetPriority(priority))
+        Behaviors.same
+    })
+  }
 }

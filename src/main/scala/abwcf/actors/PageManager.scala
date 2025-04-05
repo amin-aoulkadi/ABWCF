@@ -26,7 +26,7 @@ object PageManager {
 
   sealed trait Command
   case class Discover(crawlDepth: Int) extends Command
-  case class SetPriority(priority: Int) extends Command
+  case class SetPriority(priority: Long) extends Command
   case object Success extends Command
   case object Redirect extends Command
   case object Error extends Command
@@ -140,9 +140,6 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
 
     Behaviors.receiveMessage({
-      case _: PersistenceCommand => Behaviors.same //The PageRestorer may attempt to restore pages that are already active.
-      case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
-
       case Success | Redirect | Error =>
         pageManager ! PagePersistence.UpdateStatus(page.url, PageStatus.Processed)
         updating(page.copy(status = PageStatus.Processed))
@@ -150,6 +147,8 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
       case Passivate =>
         shard ! ClusterSharding.Passivate(context.self)
         Behaviors.same
+
+      case _ => Behaviors.same
     })
   }
 

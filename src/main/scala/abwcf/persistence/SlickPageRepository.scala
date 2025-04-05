@@ -19,7 +19,7 @@ class SlickPageRepository(implicit val session: SlickSession, val materializer: 
     def url = column[String]("url")
     def status = column[PageStatus]("status")
     def crawlDepth = column[Int]("crawl_depth")
-    def crawlPriority = column[Int]("crawl_priority")
+    def crawlPriority = column[Long]("crawl_priority")
 
     override def * = (url, status, crawlDepth, crawlPriority).mapTo[Page]
   }

@@ -1,6 +1,7 @@
 package abwcf.actors
 
 import abwcf.data.PageCandidate
+import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
 
@@ -15,9 +16,9 @@ object Crawler {
   sealed trait Command
   case class SeedUrls(urls: Seq[String]) extends Command
 
-  def apply(): Behavior[Command] = Behaviors.setup(context => {
+  def apply(settings: CrawlerSettings = CrawlerSettings()): Behavior[Command] = Behaviors.setup(context => {
     val pageManager = context.spawn(
-      Behaviors.supervise(PageGateway())
+      Behaviors.supervise(PageGateway(settings))
         .onFailure(SupervisorStrategy.resume), //The PageGateway is stateless, so resuming it is safe.
       "page-manager"
     )

@@ -2,6 +2,7 @@ package abwcf.actors
 
 import abwcf.actors.persistence.{PagePersistence, PagePersistenceManager}
 import abwcf.data.{FetchResponse, Page, PageCandidate}
+import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
 import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
@@ -23,11 +24,11 @@ object PageGateway {
 
   type CombinedCommand = Command | PagePersistence.Command | Prioritizer.Command
 
-  def apply(): Behavior[CombinedCommand] = Behaviors.setup(context => {
+  def apply(settings: CrawlerSettings): Behavior[CombinedCommand] = Behaviors.setup(context => {
     val pageShardRegion = PageManager.getShardRegion(context.system, context.self)
 
     val prioritizer = context.spawn(
-      Behaviors.supervise(Prioritizer(pageShardRegion))
+      Behaviors.supervise(Prioritizer(settings, pageShardRegion))
         .onFailure(SupervisorStrategy.resume), //The Prioritizer is stateless, so resuming it is safe.
       "prioritizer"
     )
