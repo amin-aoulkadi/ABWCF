@@ -41,7 +41,6 @@ object Fetcher {
       Behaviors.withStash(5)(buffer => {
         val http = Http(context.system.toClassic)
         val materializer = Materializer(context)
-        val bytesPerSec = 1_000_000 //Don't make this value too small. //TODO: Add to config.
 
         val urlSupplier = context.spawn(
           Behaviors.supervise(UrlSupplier(context.self, hostQueueRouter))
@@ -49,7 +48,7 @@ object Fetcher {
           "url-supplier"
         )
 
-        new Fetcher(crawlDepthLimiter, pageManager, urlNormalizer, urlSupplier, http, materializer, bytesPerSec, context, buffer).requestNextUrl()
+        new Fetcher(crawlDepthLimiter, pageManager, urlNormalizer, urlSupplier, http, materializer, context, buffer).requestNextUrl()
       })
     })
 }
@@ -60,10 +59,13 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
                                urlSupplier: ActorRef[UrlSupplier.Command],
                                http: HttpExt,
                                materializer: Materializer,
-                               bytesPerSec: Int,
                                context: ActorContext[Fetcher.Command],
                                buffer: StashBuffer[Fetcher.Command]) {
   import Fetcher.*
+
+  private val config = context.system.settings.config
+  private val bytesPerSec = config.getBytes("abwcf.fetcher.max-bytes-per-sec").toInt
+  private val maxContentLength = config.getBytes("abwcf.fetcher.max-content-length")
 
   private def requestNextUrl(): Behavior[Command] = {
     //Request a URL from the UrlSupplier:
@@ -124,7 +126,9 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       //TODO: Check if response.encoding needs to be handled (https://pekko.apache.org/docs/pekko-http/current/common/encoding.html#client-side).
 
       //Consume the response entity to receive the response body:
-      val byteFuture = response.entity.dataBytes //Response entities must be consumed or discarded.
+      val byteFuture = response.entity //Response entities must be consumed or discarded.
+        .withSizeLimit(maxContentLength)
+        .dataBytes
         .throttle(bytesPerSec, 1 second, bytes => bytes.length) //Throttles the stream and the download. The effect on network usage probably also depends on other factors (e.g. drivers) and is more noticeable during long downloads (e.g. 10 MB at 100 kB/s).
         .runReduce(_ ++ _)(using materializer)
 
