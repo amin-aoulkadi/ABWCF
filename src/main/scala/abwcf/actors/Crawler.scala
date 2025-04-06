@@ -17,14 +17,14 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
 
   def apply(settings: CrawlerSettings = CrawlerSettings()): Behavior[Command] = Behaviors.setup(context => {
-    val pageManager = context.spawn(
+    val pageGateway = context.spawn(
       Behaviors.supervise(PageGateway(settings))
         .onFailure(SupervisorStrategy.resume), //The PageGateway is stateless, so resuming it is safe.
-      "page-manager"
+      "page-gateway"
     )
 
     val urlFilter = context.spawn(
-      Behaviors.supervise(UrlFilter(pageManager))
+      Behaviors.supervise(UrlFilter(pageGateway))
         .onFailure(SupervisorStrategy.resume), //The UrlFilter is stateless, so resuming it is safe.
       "url-filter"
     )
@@ -54,7 +54,7 @@ object Crawler {
     )
 
     val fetcherManager = context.spawn(
-      Behaviors.supervise(FetcherManager(crawlDepthLimiter, hostQueueRouter, pageManager, urlNormalizer))
+      Behaviors.supervise(FetcherManager(crawlDepthLimiter, hostQueueRouter, pageGateway, urlNormalizer))
         .onFailure(SupervisorStrategy.restart),
       "fetcher-manager"
     )

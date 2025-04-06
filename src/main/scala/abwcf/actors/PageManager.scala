@@ -39,28 +39,28 @@ object PageManager {
 
   def apply(entityContext: EntityContext[Command],
             hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-            pageManager: ActorRef[PageGateway.CombinedCommand]): Behavior[Command] =
+            pageGateway: ActorRef[PageGateway.CombinedCommand]): Behavior[Command] =
     Behaviors.setup(context => {
       Behaviors.withStash(100)(buffer => {
-        new PageManager(hostQueueShardRegion, pageManager, entityContext.shard, context, buffer).recovering(entityContext.entityId)
+        new PageManager(hostQueueShardRegion, pageGateway, entityContext.shard, context, buffer).recovering(entityContext.entityId)
       })
   })
 
-  def getShardRegion(system: ActorSystem[?], pageManager: ActorRef[PageGateway.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
+  def getShardRegion(system: ActorSystem[?], pageGateway: ActorRef[PageGateway.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
     val hostQueueShardRegion = HostQueue.getShardRegion(system) //Getting the shard region here (instead of in Page.apply()) significantly reduces spam in the log.
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
       .withNoPassivationStrategy() //Disable automatic passivation.
 
     ClusterSharding(system).init(
-      Entity(TypeKey)(entityContext => PageManager(entityContext, hostQueueShardRegion, pageManager))
+      Entity(TypeKey)(entityContext => PageManager(entityContext, hostQueueShardRegion, pageGateway))
         .withSettings(settings)
     )
   }
 }
 
 private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-                                  pageManager: ActorRef[PageGateway.CombinedCommand],
+                                  pageGateway: ActorRef[PageGateway.CombinedCommand],
                                   shard: ActorRef[ClusterSharding.ShardCommand],
                                   context: ActorContext[PageManager.Command],
                                   buffer: StashBuffer[PageManager.Command]) {
@@ -78,7 +78,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
   }
 
   private def recovering(url: String): Behavior[Command] = {
-    pageManager ! PagePersistence.Recover(url)
+    pageGateway ! PagePersistence.Recover(url)
 
     Behaviors.receiveMessage({
       case RecoveryResult(None) =>
@@ -107,7 +107,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
   })
 
   private def prioritizing(candidate: PageCandidate): Behavior[Command] = {
-    pageManager ! Prioritizer.Prioritize(candidate)
+    pageGateway ! Prioritizer.Prioritize(candidate)
 
     Behaviors.receiveMessage({
       case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
@@ -123,7 +123,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
   }
 
   private def inserting(page: Page): Behavior[Command] = {
-    pageManager ! PagePersistence.Insert(page)
+    pageGateway ! PagePersistence.Insert(page)
 
     Behaviors.receiveMessage({
       case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
@@ -141,7 +141,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
 
     Behaviors.receiveMessage({
       case Success | Redirect | Error =>
-        pageManager ! PagePersistence.UpdateStatus(page.url, PageStatus.Processed)
+        pageGateway ! PagePersistence.UpdateStatus(page.url, PageStatus.Processed)
         updating(page.copy(status = PageStatus.Processed))
 
       case Passivate =>

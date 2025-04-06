@@ -21,6 +21,7 @@ object HtmlParser {
 
   def apply(urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] = Behaviors.receiveMessage({
     case Parse(page, responseBody) =>
+      //Parse the HTML document and get URLs:
       val urls: List[String] = Jsoup.parse(responseBody.utf8String, page.url)
         .select("a[href]") //Select all <a> elements that have an href attribute.
         .stream()
@@ -29,7 +30,10 @@ object HtmlParser {
         .filter(_.startsWith("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
         .toScala(List)
 
-      urls.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, page.crawlDepth + 1))) //Important: The crawl depth increases here.
+      //Send the URLs to the UrlNormalizer:
+      urls.map(PageCandidate(_, page.crawlDepth + 1)) //Important: The crawl depth increases here.
+        .foreach(urlNormalizer ! UrlNormalizer.Normalize(_))
+
       //TODO: Maybe debounce discovered URLs to eliminate duplicates across multiple responses (e.g. via a custom mailbox for the downstream actor)?
       Behaviors.same
   })

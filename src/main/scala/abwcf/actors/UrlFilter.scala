@@ -18,9 +18,9 @@ import scala.util.matching.Regex
  */
 object UrlFilter {
   sealed trait Command
-  case class Filter(page: PageCandidate) extends Command
+  case class Filter(candidate: PageCandidate) extends Command
 
-  def apply(pageManager: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(pageGateway: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
     val maxUrlLength = config.getInt("abwcf.url-filter.max-url-length")
 
@@ -33,13 +33,13 @@ object UrlFilter {
       .map(Regex(_))
 
     Behaviors.receiveMessage({
-      case Filter(page) =>
-        if (page.url.length <= maxUrlLength) {
-          val existsRequiredMatch = mustMatch.exists(_.matches(page.url))
-          val existsForbiddenMatch = mustNotMatch.exists(_.matches(page.url))
+      case Filter(candidate) =>
+        if (candidate.url.length <= maxUrlLength) {
+          val existsRequiredMatch = mustMatch.exists(_.matches(candidate.url))
+          val existsForbiddenMatch = mustNotMatch.exists(_.matches(candidate.url))
 
           if (existsRequiredMatch && !existsForbiddenMatch) {
-            pageManager ! PageGateway.Discover(page)
+            pageGateway ! PageGateway.Discover(candidate)
           }
         }
 

@@ -22,7 +22,7 @@ import java.util.Locale
  */
 object UrlNormalizer {
   sealed trait Command
-  case class Normalize(page: PageCandidate) extends Command
+  case class Normalize(candidate: PageCandidate) extends Command
 
   def apply(urlFilter: ActorRef[UrlFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
@@ -31,10 +31,10 @@ object UrlNormalizer {
     val removeFragment = config.getBoolean("abwcf.url-normalizer.remove-fragment")
 
     Behaviors.receiveMessage({
-      case Normalize(page) =>
+      case Normalize(candidate) =>
         try {
           //Normalize and remove URL components as configured:
-          val uri = URI(page.url).normalize()
+          val uri = URI(candidate.url).normalize()
           val scheme = uri.getScheme.toLowerCase(Locale.ROOT)
           val userInfo = if removeUserInfo then null else uri.getRawUserInfo
           val host = uri.getHost.toLowerCase(Locale.ROOT)
@@ -52,9 +52,9 @@ object UrlNormalizer {
           if query != null then builder += '?' ++= query
           if fragment != null then builder += '#' ++= fragment
 
-          urlFilter ! UrlFilter.Filter(page.copy(url = builder.toString()))
+          urlFilter ! UrlFilter.Filter(candidate.copy(url = builder.toString()))
         } catch {
-          case e: Exception => context.log.error("Exception while normalizing URL {}", page.url, e)
+          case e: Exception => context.log.error("Exception while normalizing URL {}", candidate.url, e)
         }
 
         Behaviors.same

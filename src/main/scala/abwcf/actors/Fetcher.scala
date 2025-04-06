@@ -35,7 +35,7 @@ object Fetcher {
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
-            pageManager: ActorRef[PageGateway.Command],
+            pageGateway: ActorRef[PageGateway.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] =
     Behaviors.setup(context => {
       Behaviors.withStash(5)(buffer => {
@@ -48,13 +48,13 @@ object Fetcher {
           "url-supplier"
         )
 
-        new Fetcher(crawlDepthLimiter, pageManager, urlNormalizer, urlSupplier, http, materializer, context, buffer).requestNextUrl()
+        new Fetcher(crawlDepthLimiter, pageGateway, urlNormalizer, urlSupplier, http, materializer, context, buffer).requestNextUrl()
       })
     })
 }
 
 private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
-                               pageManager: ActorRef[PageGateway.Command],
+                               pageGateway: ActorRef[PageGateway.Command],
                                urlNormalizer: ActorRef[UrlNormalizer.Command],
                                urlSupplier: ActorRef[UrlSupplier.Command],
                                http: HttpExt,
@@ -103,7 +103,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
       //Discard the response entity and notify the PageManager:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
-      pageManager ! PageGateway.FetchError(page, response.status)
+      pageGateway ! PageGateway.FetchError(page, response.status)
 
       buffer.unstashAll(requestNextUrl())
 
@@ -114,7 +114,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       //Discard the response entity, notify the PageManager and send the redirect URL to the UrlNormalizer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = getRedirectUrl(response, page.url)
-      pageManager ! PageGateway.FetchRedirect(page, response.status, redirectTo)
+      pageGateway ! PageGateway.FetchRedirect(page, response.status, redirectTo)
       redirectTo.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, page.crawlDepth))) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
 
       buffer.unstashAll(requestNextUrl())
@@ -147,7 +147,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
         crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(page, responseBody)
       }
 
-      pageManager ! PageGateway.FetchSuccess(page, new FetchResponse(response, responseBody))
+      pageGateway ! PageGateway.FetchSuccess(page, new FetchResponse(response, responseBody))
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>

@@ -26,7 +26,7 @@ object FetcherManager {
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
-            pageManager: ActorRef[PageGateway.Command],
+            pageGateway: ActorRef[PageGateway.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] =
     Behaviors.setup[CombinedCommand](context => {
       Behaviors.withTimers(timers => {
@@ -37,14 +37,14 @@ object FetcherManager {
         //Periodically check the number of available HostQueues:
         timers.startTimerWithFixedDelay(CheckHostQueues, initialDelay, managementDelay)
 
-        new FetcherManager(crawlDepthLimiter, hostQueueRouter, pageManager, urlNormalizer, context).fetcherManager(List.empty)
+        new FetcherManager(crawlDepthLimiter, hostQueueRouter, pageGateway, urlNormalizer, context).fetcherManager(List.empty)
       })
     }).narrow
 }
 
 private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
                                       hostQueueRouter: ActorRef[HostQueue.Command],
-                                      pageManager: ActorRef[PageGateway.Command],
+                                      pageGateway: ActorRef[PageGateway.Command],
                                       urlNormalizer: ActorRef[UrlNormalizer.Command],
                                       context: ActorContext[FetcherManager.CombinedCommand]) {
   import FetcherManager.*
@@ -68,7 +68,7 @@ private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimi
       //Spawn more Fetchers if needed:
       while scaledFetchers.length < target do {
         val fetcher = context.spawnAnonymous(
-          Behaviors.supervise(Fetcher(crawlDepthLimiter, hostQueueRouter, pageManager, urlNormalizer))
+          Behaviors.supervise(Fetcher(crawlDepthLimiter, hostQueueRouter, pageGateway, urlNormalizer))
             .onFailure(SupervisorStrategy.restart.withLoggingEnabled(true))
         )
         
