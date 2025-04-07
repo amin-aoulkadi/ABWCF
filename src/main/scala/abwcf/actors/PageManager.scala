@@ -47,7 +47,7 @@ object PageManager {
   })
 
   def getShardRegion(system: ActorSystem[?], pageGateway: ActorRef[PageGateway.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
-    val hostQueueShardRegion = HostQueue.getShardRegion(system) //Getting the shard region here (instead of in Page.apply()) significantly reduces spam in the log.
+    val hostQueueShardRegion = HostQueue.getShardRegion(system) //Getting the shard region here (instead of in PageManager.apply()) significantly reduces spam in the log.
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
       .withNoPassivationStrategy() //Disable automatic passivation.
@@ -67,7 +67,7 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
   import PageManager.*
 
   private val config = context.system.settings.config
-  private val receiveTimeout = config.getDuration("abwcf.page.passivation-receive-timeout").toScala
+  private val receiveTimeout = config.getDuration("abwcf.page-manager.passivation-receive-timeout").toScala
 
   /**
    * Adds the URL to a [[HostQueue]] so that it can be fetched.
