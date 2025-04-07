@@ -1,5 +1,6 @@
-package abwcf.actors
+package abwcf.actors.fetching
 
+import abwcf.actors.*
 import abwcf.data.{FetchResponse, Page, PageCandidate}
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
@@ -65,8 +66,8 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
   import Fetcher.*
 
   private val config = context.system.settings.config
-  private val maxContentLength = config.getBytes("abwcf.fetcher.max-content-length")
-  private var bytesPerSec = config.getBytes("abwcf.fetcher-manager.min-budget-per-fetcher").toInt
+  private val maxContentLength = config.getBytes("abwcf.fetching.max-content-length")
+  private var bytesPerSec = config.getBytes("abwcf.fetching.min-bandwidth-budget-per-fetcher").toInt
 
   private def requestNextUrl(): Behavior[Command] = {
     //Request a URL from the UrlSupplier:
@@ -120,7 +121,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = getRedirectUrl(response, page.url)
       pageGateway ! PageGateway.FetchRedirect(page, response.status, redirectTo)
-      redirectTo.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, page.crawlDepth))) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler.
+      redirectTo.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, page.crawlDepth))) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler. This also takes care of (shallow) redirect loops. Note that redirection does not increase the crawl depth.
 
       buffer.unstashAll(requestNextUrl())
 
@@ -132,7 +133,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
       //Consume the response entity to receive the response body:
       val byteFuture = response.entity //Response entities must be consumed or discarded.
-        .withSizeLimit(maxContentLength)
+        .withSizeLimit(maxContentLength) //TODO: Catch the EntityStreamSizeException and send a notification downstream.
         .dataBytes
         .throttle(bytesPerSec, 1 second, bytes => bytes.length) //Throttles the stream and the download. The effect on network usage probably also depends on other factors (e.g. drivers) and is more noticeable during long downloads (e.g. 10 MB at 100 kB/s).
         .runReduce(_ ++ _)(using materializer)
@@ -162,7 +163,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     case SetMaxBandwidth(maxBytesPerSec) =>
       bytesPerSec = maxBytesPerSec
       Behaviors.same
-      
+
     case Stop =>
       buffer.stash(Stop) //The Fetcher does not stop while it is actively fetching.
       Behaviors.same

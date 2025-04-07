@@ -1,5 +1,6 @@
-package abwcf.actors
+package abwcf.actors.fetching
 
+import abwcf.actors.{HostQueue, HostQueueRouter}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, TimerScheduler}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.Timeout

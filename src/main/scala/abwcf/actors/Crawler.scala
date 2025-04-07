@@ -1,5 +1,6 @@
 package abwcf.actors
 
+import abwcf.actors.fetching.FetcherManager
 import abwcf.data.PageCandidate
 import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
