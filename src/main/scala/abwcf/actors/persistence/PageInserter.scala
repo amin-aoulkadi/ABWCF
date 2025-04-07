@@ -28,7 +28,7 @@ object PageInserter { //TODO: Batch inserts.
         Behaviors.same
 
       case FutureFailure(throwable) =>
-        context.log.error("Error while inserting", throwable)
+        context.log.error("Exception while inserting", throwable)
         Behaviors.same
     })
   })

@@ -85,7 +85,7 @@ private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
         Behaviors.same
 
       case Passivate =>
-        context.log.info("Skipping unexpected message {}", Passivate)
+        context.log.warn("Skipping unexpected message {}", Passivate)
         Behaviors.same
     })
   }

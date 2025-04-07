@@ -28,7 +28,7 @@ object PageUpdater {
         Behaviors.same
 
       case FutureFailure(throwable) =>
-        context.log.error("Error while updating", throwable)
+        context.log.error("Exception while updating", throwable)
         Behaviors.same
     })
   })

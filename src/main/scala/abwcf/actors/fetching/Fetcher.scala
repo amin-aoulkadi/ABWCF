@@ -97,7 +97,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
         Behaviors.stopped
 
       case other =>
-        context.log.info("Skipping unexpected message {}", other)
+        context.log.warn("Skipping unexpected message {}", other)
         Behaviors.same
     })
   }
@@ -157,7 +157,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>
-      context.log.error("Error while fetching {}", page.url, throwable)
+      context.log.error("Exception while fetching {}", page.url, throwable)
       buffer.unstashAll(requestNextUrl())
 
     case SetMaxBandwidth(maxBytesPerSec) =>
@@ -169,7 +169,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       Behaviors.same
 
     case other =>
-      context.log.info("Skipping unexpected message {}", other)
+      context.log.warn("Skipping unexpected message {}", other)
       Behaviors.same
   })
 
