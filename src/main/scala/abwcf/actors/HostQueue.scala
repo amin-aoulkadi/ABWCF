@@ -1,7 +1,7 @@
 package abwcf.actors
 
 import abwcf.data.Page
-import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey}
+import org.apache.pekko.actor.typed.receptionist.{Receptionist, ServiceKey as ReceptionistServiceKey}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
@@ -24,7 +24,7 @@ import scala.jdk.DurationConverters.*
  */
 object HostQueue { //TODO: HostQueues are not persisted so they reset after shard rebalancing.
   val TypeKey: EntityTypeKey[Command] = EntityTypeKey("HostQueue")
-  val HQServiceKey: ServiceKey[Command] = ServiceKey("HostQueue")
+  val ServiceKey: ReceptionistServiceKey[Command] = ReceptionistServiceKey("HostQueue")
 
   sealed trait Command
   case class Enqueue(page: Page) extends Command
@@ -62,7 +62,7 @@ private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
   private def queue(pages: mutable.PriorityQueue[Page], crawlDelayEnd: Instant): Behavior[Command] = {
     //Disable passivation and register with the receptionist:
     context.cancelReceiveTimeout() //Non-empty HostQueues should not be passivated.
-    context.system.receptionist ! Receptionist.Register(HQServiceKey, context.self) //Allows the HostQueueRouter to route messages to this HostQueue.
+    context.system.receptionist ! Receptionist.Register(ServiceKey, context.self) //Allows the HostQueueRouter to route messages to this HostQueue.
 
     Behaviors.receiveMessage({
       case Enqueue(page) =>
@@ -74,7 +74,7 @@ private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
         replyTo ! Head(head)
 
         if (pages.isEmpty) {
-          context.system.receptionist ! Receptionist.Deregister(HQServiceKey, context.self) //The HostQueueRouter should stop routing messages to this HostQueue.
+          context.system.receptionist ! Receptionist.Deregister(ServiceKey, context.self) //The HostQueueRouter should stop routing messages to this HostQueue.
           emptyQueue(Instant.now.plus(crawlDelay))
         } else {
           queue(pages, Instant.now.plus(crawlDelay))
