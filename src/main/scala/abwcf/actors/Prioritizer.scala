@@ -17,14 +17,12 @@ object Prioritizer {
   sealed trait Command
   case class Prioritize(candidate: PageCandidate) extends Command
 
-  def apply(settings: CrawlerSettings, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command] = {
-    val prioritizationFunction = settings.prioritizationFunction
-    
+  def apply(settings: CrawlerSettings, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command] = Behaviors.setup(context => {
     Behaviors.receiveMessage({
       case Prioritize(candidate) =>
-        val priority = prioritizationFunction(candidate)
+        val priority = settings.userCode.prioritize(candidate, context)
         pageShardRegion ! ShardingEnvelope(candidate.url, PageManager.SetPriority(priority))
         Behaviors.same
     })
-  }
+  })
 }

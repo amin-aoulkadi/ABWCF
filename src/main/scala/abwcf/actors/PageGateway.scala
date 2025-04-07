@@ -46,7 +46,7 @@ object PageGateway {
     )
 
     val userCodeRunner = context.spawn(
-      Behaviors.supervise(UserCodeRunner(pageShardRegion))
+      Behaviors.supervise(UserCodeRunner(settings, pageShardRegion))
         .onFailure(SupervisorStrategy.resume), //The UserCodeRunner is stateless, so resuming it is safe.
       "user-code-runner"
     )
