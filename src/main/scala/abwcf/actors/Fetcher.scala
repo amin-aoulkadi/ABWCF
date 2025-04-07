@@ -15,7 +15,7 @@ import scala.language.postfixOps
 import scala.util.{Failure, Success}
 
 /**
- * Fetches resources over HTTP.
+ * Fetches resources over HTTP. Uses a [[UrlSupplier]] to request URLs from a [[HostQueueRouter]].
  *
  * [[Fetcher]] actors should be managed by a [[FetcherManager]] actor.
  *
@@ -29,6 +29,7 @@ object Fetcher {
 
   sealed trait Command
   case class Fetch(page: Page) extends Command
+  case class SetMaxBandwidth(maxBytesPerSec: Int) extends Command
   case object Stop extends Command
   private case class FutureSuccess(value: HttpResponse | ByteString) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
@@ -64,8 +65,8 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
   import Fetcher.*
 
   private val config = context.system.settings.config
-  private val bytesPerSec = config.getBytes("abwcf.fetcher.max-bytes-per-sec").toInt
   private val maxContentLength = config.getBytes("abwcf.fetcher.max-content-length")
+  private var bytesPerSec = config.getBytes("abwcf.fetcher-manager.min-budget-per-fetcher").toInt
 
   private def requestNextUrl(): Behavior[Command] = {
     //Request a URL from the UrlSupplier:
@@ -85,6 +86,10 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
         })
 
         receiveHttpResponse(page, null)
+
+      case SetMaxBandwidth(maxBytesPerSec) =>
+        bytesPerSec = maxBytesPerSec
+        Behaviors.same
 
       case Stop =>
         context.log.debug("Stopping")
@@ -154,6 +159,10 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       context.log.error("Error while fetching {}", page.url, throwable)
       buffer.unstashAll(requestNextUrl())
 
+    case SetMaxBandwidth(maxBytesPerSec) =>
+      bytesPerSec = maxBytesPerSec
+      Behaviors.same
+      
     case Stop =>
       buffer.stash(Stop) //The Fetcher does not stop while it is actively fetching.
       Behaviors.same
