@@ -1,6 +1,7 @@
 package abwcf.actors.fetching
 
 import abwcf.actors.{HostQueue, HostQueueRouter}
+import abwcf.util.TimeUtils
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, TimerScheduler}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.Timeout
@@ -61,7 +62,7 @@ private class UrlSupplier private(fetcher: ActorRef[Fetcher.Command],
    */
   private def backOff(delayEnd: Instant): Unit = {
     //Determine the delay:
-    var delay = Instant.now().until(delayEnd).toScala
+    var delay = TimeUtils.asFiniteDuration(Instant.now.until(delayEnd)) //Using TimeUtils.asFiniteDuration() to avoid an exception if delayEnd is Instant.MAX.
     delay = delay.max(minDelay) //Ensure that delay ≥ minDelay.
     delay = delay.min(maxDelay) //Ensure that delay ≤ maxDelay.
 

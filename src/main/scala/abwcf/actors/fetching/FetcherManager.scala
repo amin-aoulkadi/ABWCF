@@ -76,7 +76,8 @@ private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimi
       scaleFetchers(target)
 
       //Tell each Fetcher how much bandwidth it can use:
-      val bytesPerSecPerFetcher = (totalBytesPerSec / target).toInt //Integer division with remainder. Cast because the Fetcher needs an Int.
+      val bandwidthUsers = fetchers.length.max(1) //Ensure that bandwidthUsers ≠ 0 (to avoid dividing by zero).
+      val bytesPerSecPerFetcher = (totalBytesPerSec / bandwidthUsers).toInt //Integer division with remainder. Cast because the Fetcher needs an Int.
       fetchers.foreach(_ ! Fetcher.SetMaxBandwidth(bytesPerSecPerFetcher))
 
       context.log.info("Current number of Fetchers: {} (with up to {} B/s bandwidth each)", fetchers.length, bytesPerSecPerFetcher)
