@@ -24,8 +24,14 @@ object Crawler {
       "page-gateway"
     )
 
+    val robotsFilter = context.spawn(
+      Behaviors.supervise(RobotsFilter(pageGateway))
+        .onFailure(SupervisorStrategy.resume), //Avoid restarting for now because restarting means repopulating the cache (which is rather expensive).
+      "robots-filter"
+    )
+
     val urlFilter = context.spawn(
-      Behaviors.supervise(UrlFilter(pageGateway))
+      Behaviors.supervise(UrlFilter(robotsFilter))
         .onFailure(SupervisorStrategy.resume), //The UrlFilter is stateless, so resuming it is safe.
       "url-filter"
     )

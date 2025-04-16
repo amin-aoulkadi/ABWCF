@@ -9,6 +9,8 @@ lazy val abwcf = (project in file("."))
 val pekkoVersion = "1.1.3" //License: Apache-2.0
 val pekkoHttpVersion = "1.1.0" //License: Apache-2.0
 val pekkoSlickVersion = "1.1.0" //License: Apache-2.0
+val caffeineVersion = "3.2.0" //License: Apache-2.0
+val crawlerCommonsVersion = "1.4" //License: Apache-2.0
 val jsoupVersion = "1.19.1" //License: MIT
 val scalaTestVersion = "3.2.19" //License: Apache-2.0
 
@@ -20,6 +22,8 @@ libraryDependencies ++= Seq(
   "org.apache.pekko" %% "pekko-connectors-slick" % pekkoSlickVersion,
   "org.apache.pekko" %% "pekko-stream" % pekkoVersion, //Required by Pekko HTTP and Pekko Connectors Slick.
   "org.apache.pekko" %% "pekko-http" % pekkoHttpVersion,
+  "com.github.ben-manes.caffeine" % "caffeine" % caffeineVersion,
+  "com.github.crawler-commons" % "crawler-commons" % crawlerCommonsVersion,
   "org.jsoup" % "jsoup" % jsoupVersion,
   "org.scalatest" %% "scalatest" % scalaTestVersion % Test
 )

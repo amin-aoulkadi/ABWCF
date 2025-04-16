@@ -20,7 +20,7 @@ object UrlFilter {
   sealed trait Command
   case class Filter(candidate: PageCandidate) extends Command
 
-  def apply(pageGateway: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(robotsFilter: ActorRef[RobotsFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
     val maxUrlLength = config.getInt("abwcf.url-filter.max-url-length")
 
@@ -39,7 +39,7 @@ object UrlFilter {
           val existsForbiddenMatch = mustNotMatch.exists(_.matches(candidate.url))
 
           if (existsRequiredMatch && !existsForbiddenMatch) {
-            pageGateway ! PageGateway.Discover(candidate)
+            robotsFilter ! RobotsFilter.Filter(candidate)
           }
         }
 
