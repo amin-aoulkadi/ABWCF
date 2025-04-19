@@ -1,10 +1,10 @@
-package abwcf.actors.persistence
+package abwcf.actors.persistence.page
 
 import abwcf.data.{Page, PageStatus}
 import org.apache.pekko.actor.typed.ActorRef
 
 /**
- * The protocol of [[abwcf.actors.persistence]] actors.
+ * The protocol of [[abwcf.actors.persistence.page]] actors.
  */
 object PagePersistence {
   sealed trait Command

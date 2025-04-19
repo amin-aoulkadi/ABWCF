@@ -1,7 +1,7 @@
-package abwcf.actors.persistence
+package abwcf.actors.persistence.page
 
 import abwcf.actors.PageManager
-import abwcf.actors.persistence.PagePersistence.{FindByStatus, Recover, ResultSeq}
+import abwcf.actors.persistence.page.PagePersistence.{FindByStatus, Recover, ResultSeq}
 import abwcf.data.Page
 import abwcf.persistence.PageRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors

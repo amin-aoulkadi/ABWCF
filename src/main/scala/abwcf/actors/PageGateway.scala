@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.actors.persistence.{PagePersistence, PagePersistenceManager}
+import abwcf.actors.persistence.page.{PagePersistence, PagePersistenceManager}
 import abwcf.data.{FetchResponse, Page, PageCandidate}
 import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors

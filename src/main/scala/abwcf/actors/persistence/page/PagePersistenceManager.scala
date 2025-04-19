@@ -1,7 +1,7 @@
-package abwcf.actors.persistence
+package abwcf.actors.persistence.page
 
 import abwcf.actors.PageManager
-import abwcf.actors.persistence.PagePersistence.{FindByStatus, Insert, Recover, UpdateStatus}
+import abwcf.actors.persistence.page.PagePersistence.{FindByStatus, Insert, Recover, UpdateStatus}
 import abwcf.persistence.SlickPageRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}

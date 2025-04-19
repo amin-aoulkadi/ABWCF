@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.actors.persistence.PagePersistence
+import abwcf.actors.persistence.page.PagePersistence
 import abwcf.data.PageStatus
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
