@@ -18,6 +18,12 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
 
   def apply(settings: CrawlerSettings = CrawlerSettings()): Behavior[Command] = Behaviors.setup(context => {
+    val hostGateway = context.spawn(
+      Behaviors.supervise(HostGateway())
+        .onFailure(SupervisorStrategy.resume), //The HostGateway is stateless, so resuming it is safe.
+      "host-gateway"
+    )
+    
     val pageGateway = context.spawn(
       Behaviors.supervise(PageGateway(settings))
         .onFailure(SupervisorStrategy.resume), //The PageGateway is stateless, so resuming it is safe.
@@ -25,8 +31,8 @@ object Crawler {
     )
 
     val robotsFilter = context.spawn(
-      Behaviors.supervise(RobotsFilter(pageGateway))
-        .onFailure(SupervisorStrategy.resume), //Avoid restarting for now because restarting means repopulating the cache (which is rather expensive).
+      Behaviors.supervise(RobotsFilter(hostGateway, pageGateway))
+        .onFailure(SupervisorStrategy.resume), //Restarting would mean losing all pending candidates and repopulating the cache (which is rather expensive).
       "robots-filter"
     )
 

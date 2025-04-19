@@ -10,17 +10,18 @@ import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import java.time.Instant
 import scala.collection.mutable
 
+//TODO: Documentation.
 object RobotsFilter {
   sealed trait Command
   case class Filter(candidate: PageCandidate) extends Command
 
   private type CombinedCommand = Command | HostManager.HostInfo
 
-  def apply(pageGateway: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
-    val hostManagerShardRegion = HostManager.getShardRegion(context.system)
+  def apply(hostGateway: ActorRef[HostGateway.CombinedCommand], pageGateway: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+    val hostShardRegion = HostManager.getShardRegion(context.system, hostGateway)
 
     val cache = Caffeine.newBuilder() //Mutable state!
-      .maximumSize(1000)
+      .maximumSize(1000) //TODO: Add to config.
       .expireAfter(Expiry.writing[String, HostInformation]((_, hostInfo) => Instant.now.until(hostInfo.validUntil)))
       .build[String, HostInformation]()
 
@@ -35,7 +36,7 @@ object RobotsFilter {
           //Buffer the URL and request information from the HostManager:
           val candidates = pendingCandidates.getOrElse(schemeAndAuthority, mutable.ArrayBuffer.empty)
           pendingCandidates.update(schemeAndAuthority, candidates.append(candidate))
-          hostManagerShardRegion ! ShardingEnvelope(schemeAndAuthority, HostManager.GetHostInfo(context.self))
+          hostShardRegion ! ShardingEnvelope(schemeAndAuthority, HostManager.GetHostInfo(context.self))
         } else {
           //Filter the URL:
           if (hostInfo.robotRules.isAllowed(candidate.url)) {
