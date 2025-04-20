@@ -14,19 +14,15 @@ object HttpUtils {
    *      - [[https://datatracker.ietf.org/doc/html/rfc9110 RFC 9110 - HTTP Semantics]] (section ''10.2.2. Location'')
    */
   def getRedirectUrl(response: HttpResponse, url: String): Option[String] = {
-    val locationHeaders = response.headers[Location]
-
-    if (locationHeaders.nonEmpty) {
-      var redirectUri = locationHeaders.head.uri
+    response.header[Location].map(location => {
+      var redirectUri = location.uri
 
       if (redirectUri.isRelative) {
         val originalUri = Uri(url)
         redirectUri = redirectUri.resolvedAgainst(originalUri).withFragment(originalUri.fragment.orNull)
       }
 
-      Some(redirectUri.toString)
-    } else {
-      None
-    }
+      redirectUri.toString
+    })
   }
 }
