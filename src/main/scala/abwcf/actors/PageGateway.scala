@@ -35,7 +35,7 @@ object PageGateway {
 
     val pagePersistenceManager = context.spawn(
       Behaviors.supervise(PagePersistenceManager(pageShardRegion))
-        .onFailure(SupervisorStrategy.resume), //Restarting would be problematic because the PagePersistenceManager internally creates a SlickSession that has to be closed explicitly.
+        .onFailure(SupervisorStrategy.resume),
       "page-persistence-manager"
     )
 

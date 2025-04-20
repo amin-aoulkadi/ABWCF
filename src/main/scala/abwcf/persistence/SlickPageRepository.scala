@@ -7,7 +7,8 @@ import org.apache.pekko.stream.scaladsl.Sink
 
 import scala.concurrent.Future
 
-class SlickPageRepository(implicit val session: SlickSession, val materializer: Materializer) extends PageRepository {
+class SlickPageRepository(implicit val materializer: Materializer) extends PageRepository {
+  private implicit val session: SlickSession = SlickSessionContainer.getSession
   import session.profile.api.*
 
   private implicit val statusMapper: BaseColumnType[PageStatus] = MappedColumnType.base[PageStatus, String](

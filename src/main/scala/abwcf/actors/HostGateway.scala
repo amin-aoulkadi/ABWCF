@@ -1,8 +1,8 @@
 package abwcf.actors
 
 import abwcf.actors.persistence.host.{HostPersistence, HostPersistenceManager}
-import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
+import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
 
 /**
  * Gateway between [[HostManager]] actors and non-sharded actors.
@@ -18,13 +18,13 @@ object HostGateway {
 
   def apply(): Behavior[CombinedCommand] = Behaviors.setup(context => {
     val hostShardRegion = HostManager.getShardRegion(context.system, context.self)
-    
+
     val hostPersistenceManager = context.spawn(
       Behaviors.supervise(HostPersistenceManager(hostShardRegion))
-        .onFailure(SupervisorStrategy.resume), //Restarting would be problematic because the HostPersistenceManager internally creates a SlickSession that has to be closed explicitly.
+        .onFailure(SupervisorStrategy.resume),
       "host-persistence-manager"
     )
-    
+
     Behaviors.receiveMessage({
       case command: HostPersistence.Command =>
         hostPersistenceManager ! command

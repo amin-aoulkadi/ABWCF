@@ -10,7 +10,8 @@ import java.time.Instant
 import java.util.stream.Collectors
 import scala.concurrent.Future
 
-class SlickHostRepository(implicit val session: SlickSession, val materializer: Materializer) extends HostRepository {
+class SlickHostRepository(implicit val materializer: Materializer) extends HostRepository {
+  private implicit val session: SlickSession = SlickSessionContainer.getSession
   import session.profile.api.*
 
   private def hostToTuple(hostInfo: HostInformation): (String, String, Long, Instant) = {
@@ -24,9 +25,12 @@ class SlickHostRepository(implicit val session: SlickSession, val materializer: 
   private def tupleToHost(tuple: (String, String, Long, Instant)): HostInformation = {
     val rules = new SimpleRobotRules()
     rules.setCrawlDelay(tuple._3)
-    tuple._2.split('\n')
-      .map(stringToRule)
-      .foreach((prefix, isAllow) => rules.addRule(prefix, isAllow))
+
+    if (tuple._2.nonEmpty) {
+      tuple._2.split('\n')
+        .map(stringToRule)
+        .foreach((prefix, isAllow) => rules.addRule(prefix, isAllow))
+    }
 
     HostInformation(tuple._1, rules, tuple._4)
   }
@@ -61,7 +65,7 @@ class SlickHostRepository(implicit val session: SlickSession, val materializer: 
       .filter(_.schemeAndAuthority === schemeAndAuthority)
       .map(h => (h.schemeAndAuthority, h.robotRules, h.crawlDelay, h.validUntil))
   })
-  
+
   private lazy val compiledSelect = Compiled((schemeAndAuthority: Rep[String]) => {
     hosts.filter(_.schemeAndAuthority === schemeAndAuthority)
   })
@@ -74,7 +78,7 @@ class SlickHostRepository(implicit val session: SlickSession, val materializer: 
     val tuple = hostToTuple(hostInfo)
     session.db.run(compiledUpdate(tuple).update(tuple)) //Based on https://stackoverflow.com/a/38261000.
   }
-  
+
   override def findBySchemeAndAuthority(schemeAndAuthority: String): Future[Option[HostInformation]] = {
     Slick.source(compiledSelect(schemeAndAuthority).result).runWith(Sink.headOption)
   }

@@ -2,6 +2,7 @@ package abwcf.actors
 
 import abwcf.actors.fetching.FetcherManager
 import abwcf.data.PageCandidate
+import abwcf.persistence.SlickSessionContainer
 import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
@@ -18,12 +19,14 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
 
   def apply(settings: CrawlerSettings = CrawlerSettings()): Behavior[Command] = Behaviors.setup(context => {
+    SlickSessionContainer.initialize(context.system) //Initialize database connection resources.
+
     val hostGateway = context.spawn(
       Behaviors.supervise(HostGateway())
         .onFailure(SupervisorStrategy.resume), //The HostGateway is stateless, so resuming it is safe.
       "host-gateway"
     )
-    
+
     val pageGateway = context.spawn(
       Behaviors.supervise(PageGateway(settings))
         .onFailure(SupervisorStrategy.resume), //The PageGateway is stateless, so resuming it is safe.
