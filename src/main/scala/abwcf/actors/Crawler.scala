@@ -29,6 +29,7 @@ object Crawler {
     )
 
     HostManager.initializeSharding(context.system, hostPersistenceManager)
+    HostQueue.initializeSharding(context.system)
 
     val pageGateway = context.spawn(
       Behaviors.supervise(PageGateway(settings))

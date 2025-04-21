@@ -38,34 +38,32 @@ object PageManager {
   case object UpdateSuccess extends PersistenceCommand
 
   def apply(entityContext: EntityContext[Command],
-            hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
             pageGateway: ActorRef[PageGateway.CombinedCommand]): Behavior[Command] =
     Behaviors.setup(context => {
       Behaviors.withStash(100)(buffer => {
-        new PageManager(hostQueueShardRegion, pageGateway, entityContext.shard, context, buffer).recovering(entityContext.entityId)
+        new PageManager(pageGateway, entityContext.shard, context, buffer).recovering(entityContext.entityId)
       })
   })
 
   def getShardRegion(system: ActorSystem[?], pageGateway: ActorRef[PageGateway.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
-    val hostQueueShardRegion = HostQueue.getShardRegion(system) //Getting the shard region here (instead of in PageManager.apply()) significantly reduces spam in the log.
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
       .withNoPassivationStrategy() //Disable automatic passivation.
 
     ClusterSharding(system).init(
-      Entity(TypeKey)(entityContext => PageManager(entityContext, hostQueueShardRegion, pageGateway))
+      Entity(TypeKey)(entityContext => PageManager(entityContext, pageGateway))
         .withSettings(settings)
     )
   }
 }
 
-private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelope[HostQueue.Command]],
-                                  pageGateway: ActorRef[PageGateway.CombinedCommand],
+private class PageManager private(pageGateway: ActorRef[PageGateway.CombinedCommand],
                                   shard: ActorRef[ClusterSharding.ShardCommand],
                                   context: ActorContext[PageManager.Command],
                                   buffer: StashBuffer[PageManager.Command]) {
   import PageManager.*
 
+  private val sharding = ClusterSharding(context.system)
   private val config = context.system.settings.config
   private val receiveTimeout = config.getDuration("abwcf.page-manager.passivation-receive-timeout").toScala
 
@@ -74,7 +72,8 @@ private class PageManager private(hostQueueShardRegion: ActorRef[ShardingEnvelop
    */
   private def addToHostQueue(page: Page): Unit = {
     val host = URI(page.url).getHost
-    hostQueueShardRegion ! ShardingEnvelope(host, HostQueue.Enqueue(page))
+    val hostQueue = sharding.entityRefFor(HostQueue.TypeKey, host)
+    hostQueue ! HostQueue.Enqueue(page)
   }
 
   private def recovering(url: String): Behavior[Command] = {
