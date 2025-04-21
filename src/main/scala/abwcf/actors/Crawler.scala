@@ -4,7 +4,7 @@ import abwcf.actors.fetching.FetcherManager
 import abwcf.actors.persistence.host.HostPersistenceManager
 import abwcf.data.PageCandidate
 import abwcf.persistence.SlickSessionContainer
-import abwcf.util.{ActorRegistry, CrawlerSettings}
+import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
 
@@ -28,7 +28,7 @@ object Crawler {
       "host-persistence-manager"
     )
 
-    ActorRegistry.hostPersistenceManager = Some(hostPersistenceManager)
+    HostManager.initializeSharding(context.system, hostPersistenceManager)
 
     val pageGateway = context.spawn(
       Behaviors.supervise(PageGateway(settings))

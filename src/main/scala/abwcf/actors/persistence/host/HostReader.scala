@@ -4,9 +4,9 @@ import abwcf.actors.HostManager
 import abwcf.actors.persistence.host.HostPersistence.Recover
 import abwcf.data.HostInformation
 import abwcf.persistence.HostRepository
+import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 
 import scala.util.{Failure, Success}
 
@@ -15,7 +15,9 @@ object HostReader {
   private case class RecoverSuccess(result: Option[HostInformation], replyToSchemeAndAuthority: String) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
-  def apply(hostRepository: HostRepository, hostShardRegion: ActorRef[ShardingEnvelope[HostManager.Command]]): Behavior[Command | HostPersistence.ReadCommand] = Behaviors.setup(context => {
+  def apply(hostRepository: HostRepository): Behavior[Command | HostPersistence.ReadCommand] = Behaviors.setup(context => {
+    val sharding = ClusterSharding(context.system)
+    
     Behaviors.receiveMessage({
       case Recover(schemeAndAuthority) =>
         context.pipeToSelf(hostRepository.findBySchemeAndAuthority(schemeAndAuthority))({
@@ -25,7 +27,8 @@ object HostReader {
         Behaviors.same
 
       case RecoverSuccess(result, replyToSchemeAndAuthority) =>
-        hostShardRegion ! ShardingEnvelope(replyToSchemeAndAuthority, HostManager.RecoveryResult(result))
+        val hostManager = sharding.entityRefFor(HostManager.TypeKey, replyToSchemeAndAuthority)
+        hostManager ! HostManager.RecoveryResult(result)
         Behaviors.same
 
       case FutureFailure(throwable) =>

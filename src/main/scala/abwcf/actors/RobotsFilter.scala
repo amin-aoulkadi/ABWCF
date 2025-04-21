@@ -5,7 +5,7 @@ import abwcf.util.UrlUtils
 import com.github.benmanes.caffeine.cache.{Caffeine, Expiry}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 
 import java.time.Instant
 import scala.collection.mutable
@@ -28,7 +28,7 @@ object RobotsFilter {
   private type CombinedCommand = Command | HostManager.HostInfo
 
   def apply(pageGateway: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
-    val hostShardRegion = HostManager.getShardRegion(context.system)
+    val sharding = ClusterSharding(context.system)
 
     val cache = Caffeine.newBuilder() //Mutable state!
       .maximumSize(1000) //TODO: Add to config.
@@ -43,10 +43,13 @@ object RobotsFilter {
         val hostInfo = cache.getIfPresent(schemeAndAuthority)
 
         if (hostInfo == null) {
-          //Buffer the URL and request information from the HostManager:
+          //Buffer the URL:
           val candidates = pendingCandidates.getOrElse(schemeAndAuthority, mutable.ArrayBuffer.empty)
           pendingCandidates.update(schemeAndAuthority, candidates.append(candidate))
-          hostShardRegion ! ShardingEnvelope(schemeAndAuthority, HostManager.GetHostInfo(context.self))
+
+          //Request information from the HostManager:
+          val hostManager = sharding.entityRefFor(HostManager.TypeKey, schemeAndAuthority)
+          hostManager ! HostManager.GetHostInfo(context.self)
         } else {
           //Filter the URL:
           if (hostInfo.robotRules.isAllowed(candidate.url)) {

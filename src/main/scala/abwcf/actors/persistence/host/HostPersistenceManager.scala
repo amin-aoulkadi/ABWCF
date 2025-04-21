@@ -1,6 +1,5 @@
 package abwcf.actors.persistence.host
 
-import abwcf.actors.HostManager
 import abwcf.actors.persistence.host.HostPersistence.{Insert, Recover, Update}
 import abwcf.persistence.SlickHostRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
@@ -18,11 +17,10 @@ object HostPersistenceManager {
   def apply(): Behavior[HostPersistence.Command] = Behaviors.setup(context => {
     val materializer = Materializer(context)
     val hostRepository = new SlickHostRepository()(using materializer)
-    val hostShardRegion = HostManager.getShardRegion(context.system)
 
-    val hostInserter = context.spawnAnonymous(HostInserter(hostRepository, hostShardRegion)) //TODO: Supervise.
-    val hostReader = context.spawnAnonymous(HostReader(hostRepository, hostShardRegion))
-    val hostUpdater = context.spawnAnonymous(HostUpdater(hostRepository, hostShardRegion))
+    val hostInserter = context.spawnAnonymous(HostInserter(hostRepository)) //TODO: Supervise.
+    val hostReader = context.spawnAnonymous(HostReader(hostRepository))
+    val hostUpdater = context.spawnAnonymous(HostUpdater(hostRepository))
 
     Behaviors.receiveMessage({
       case Insert(hostInfo) =>
