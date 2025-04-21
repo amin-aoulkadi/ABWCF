@@ -2,6 +2,7 @@ package abwcf.actors
 
 import abwcf.actors.persistence.host.HostPersistence
 import abwcf.data.HostInformation
+import abwcf.util.ActorRegistry
 import crawlercommons.robots.{SimpleRobotRules, SimpleRobotRulesParser}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -38,32 +39,33 @@ object HostManager {
 
   private type CombinedCommand = Command | RobotsFetcher.Reply
 
-  def apply(entityContext: EntityContext[Command], hostGateway: ActorRef[HostGateway.CombinedCommand]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+  def apply(entityContext: EntityContext[Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withStash(100)(buffer => { //TODO: The stash can fill up with GetHostInfo messages.
-      new HostManager(hostGateway, context, buffer).recovering(entityContext.entityId)
+      new HostManager(context, buffer).recovering(entityContext.entityId)
     })
   }).narrow
 
-  def getShardRegion(system: ActorSystem[?], hostGateway: ActorRef[HostGateway.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
+  def getShardRegion(system: ActorSystem[?]): ActorRef[ShardingEnvelope[Command]] = {
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //There is no need to remember HostManagers.
       .withNoPassivationStrategy() //Disable automatic passivation.
 
     ClusterSharding(system).init(
-      Entity(TypeKey)(entityContext => HostManager(entityContext, hostGateway))
+      Entity(TypeKey)(entityContext => HostManager(entityContext))
         .withSettings(settings)
     )
   }
 }
 
-private class HostManager private (hostGateway: ActorRef[HostGateway.CombinedCommand],
-                                   context: ActorContext[HostManager.CombinedCommand],
+private class HostManager private (context: ActorContext[HostManager.CombinedCommand],
                                    buffer: StashBuffer[HostManager.CombinedCommand]) {
   import HostManager.*
+  
+  private val hostPersistenceManager = ActorRegistry.hostPersistenceManager.get
   //TODO: Passivation.
 
   private def recovering(schemeAndAuthority: String): Behavior[CombinedCommand] = {
-    hostGateway ! HostPersistence.Recover(schemeAndAuthority)
+    hostPersistenceManager ! HostPersistence.Recover(schemeAndAuthority)
 
     Behaviors.receiveMessage({
       case RecoveryResult(None) =>
@@ -125,7 +127,7 @@ private class HostManager private (hostGateway: ActorRef[HostGateway.CombinedCom
   }
 
   private def persisting(hostInfo: HostInformation, persistenceCommand: HostPersistence.Insert | HostPersistence.Update): Behavior[CombinedCommand] = {
-    hostGateway ! persistenceCommand
+    hostPersistenceManager ! persistenceCommand
 
     Behaviors.receiveMessage({
       case InsertSuccess | UpdateSuccess =>

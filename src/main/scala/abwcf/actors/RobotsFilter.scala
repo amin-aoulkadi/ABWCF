@@ -10,15 +10,25 @@ import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import java.time.Instant
 import scala.collection.mutable
 
-//TODO: Documentation.
+/**
+ * Filters out URLs that should not be crawled based on the Robots Exclusion Protocol.
+ *
+ * There should be one [[RobotsFilter]] actor per node.
+ *
+ * This actor is stateful.
+ *
+ * @see
+ *      - [[https://datatracker.ietf.org/doc/html/rfc9309 RFC 9309 - Robots Exclusion Protocol]]
+ *      - [[https://en.wikipedia.org/wiki/Robots.txt Wikipedia: robots.txt]]
+ */
 object RobotsFilter {
   sealed trait Command
   case class Filter(candidate: PageCandidate) extends Command
 
   private type CombinedCommand = Command | HostManager.HostInfo
 
-  def apply(hostGateway: ActorRef[HostGateway.CombinedCommand], pageGateway: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
-    val hostShardRegion = HostManager.getShardRegion(context.system, hostGateway)
+  def apply(pageGateway: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+    val hostShardRegion = HostManager.getShardRegion(context.system)
 
     val cache = Caffeine.newBuilder() //Mutable state!
       .maximumSize(1000) //TODO: Add to config.

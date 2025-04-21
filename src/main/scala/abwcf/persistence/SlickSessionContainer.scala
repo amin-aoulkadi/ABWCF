@@ -11,6 +11,8 @@ import scala.concurrent.Future
  * Contains a singleton [[SlickSession]] that can be accessed anywhere in the application.
  *
  * The session is closed automatically when the actor system terminates.
+ *
+ * '''Caution:''' It is possible to create multiple actor systems in one JVM, but there can only be one [[SlickSessionContainer]] per JVM.
  */
 object SlickSessionContainer {
   private var session: Option[SlickSession] = None

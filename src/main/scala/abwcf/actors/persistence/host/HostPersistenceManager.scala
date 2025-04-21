@@ -5,7 +5,6 @@ import abwcf.actors.persistence.host.HostPersistence.{Insert, Recover, Update}
 import abwcf.persistence.SlickHostRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
 import org.apache.pekko.stream.Materializer
 
 /**
@@ -16,9 +15,10 @@ import org.apache.pekko.stream.Materializer
  * This actor is stateless.
  */
 object HostPersistenceManager {
-  def apply(hostShardRegion: ActorRef[ShardingEnvelope[HostManager.Command]]): Behavior[HostPersistence.Command] = Behaviors.setup(context => {
+  def apply(): Behavior[HostPersistence.Command] = Behaviors.setup(context => {
     val materializer = Materializer(context)
     val hostRepository = new SlickHostRepository()(using materializer)
+    val hostShardRegion = HostManager.getShardRegion(context.system)
 
     val hostInserter = context.spawnAnonymous(HostInserter(hostRepository, hostShardRegion)) //TODO: Supervise.
     val hostReader = context.spawnAnonymous(HostReader(hostRepository, hostShardRegion))

@@ -1,9 +1,10 @@
 package abwcf.actors
 
 import abwcf.actors.fetching.FetcherManager
+import abwcf.actors.persistence.host.HostPersistenceManager
 import abwcf.data.PageCandidate
 import abwcf.persistence.SlickSessionContainer
-import abwcf.util.CrawlerSettings
+import abwcf.util.{ActorRegistry, CrawlerSettings}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
 
@@ -21,11 +22,13 @@ object Crawler {
   def apply(settings: CrawlerSettings = CrawlerSettings()): Behavior[Command] = Behaviors.setup(context => {
     SlickSessionContainer.initialize(context.system) //Initialize database connection resources.
 
-    val hostGateway = context.spawn(
-      Behaviors.supervise(HostGateway())
-        .onFailure(SupervisorStrategy.resume), //The HostGateway is stateless, so resuming it is safe.
-      "host-gateway"
+    val hostPersistenceManager = context.spawn(
+      Behaviors.supervise(HostPersistenceManager())
+        .onFailure(SupervisorStrategy.resume),
+      "host-persistence-manager"
     )
+
+    ActorRegistry.hostPersistenceManager = Some(hostPersistenceManager)
 
     val pageGateway = context.spawn(
       Behaviors.supervise(PageGateway(settings))
@@ -34,7 +37,7 @@ object Crawler {
     )
 
     val robotsFilter = context.spawn(
-      Behaviors.supervise(RobotsFilter(hostGateway, pageGateway))
+      Behaviors.supervise(RobotsFilter(pageGateway))
         .onFailure(SupervisorStrategy.resume), //Restarting would mean losing all pending candidates and repopulating the cache (which is rather expensive).
       "robots-filter"
     )
