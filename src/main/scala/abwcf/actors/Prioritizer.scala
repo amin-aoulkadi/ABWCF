@@ -2,9 +2,9 @@ package abwcf.actors
 
 import abwcf.data.PageCandidate
 import abwcf.util.CrawlerSettings
+import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 
 /**
  * Assigns crawl priorities to [[PageCandidate]]s.
@@ -17,11 +17,14 @@ object Prioritizer {
   sealed trait Command
   case class Prioritize(candidate: PageCandidate) extends Command
 
-  def apply(settings: CrawlerSettings, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
+    val sharding = ClusterSharding(context.system)
+
     Behaviors.receiveMessage({
       case Prioritize(candidate) =>
         val priority = settings.userCode.prioritize(candidate, context)
-        pageShardRegion ! ShardingEnvelope(candidate.url, PageManager.SetPriority(priority))
+        val pageManager = sharding.entityRefFor(PageManager.TypeKey, candidate.url)
+        pageManager ! PageManager.SetPriority(priority)
         Behaviors.same
     })
   })

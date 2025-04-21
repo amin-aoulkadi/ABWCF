@@ -45,7 +45,7 @@ object PageManager {
       })
   })
 
-  def getShardRegion(system: ActorSystem[?], pageGateway: ActorRef[PageGateway.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
+  def initializeSharding(system: ActorSystem[?], pageGateway: ActorRef[PageGateway.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
       .withNoPassivationStrategy() //Disable automatic passivation.

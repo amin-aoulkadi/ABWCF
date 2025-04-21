@@ -6,7 +6,7 @@ import abwcf.data.Page
 import abwcf.persistence.PageRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 
 import scala.util.{Failure, Success}
 
@@ -16,7 +16,9 @@ object PageReader {
   private case class FindByStatusSuccess(result: Seq[Page], replyTo: ActorRef[ResultSeq]) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
-  def apply(pageRepository: PageRepository, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command | PagePersistence.ReadCommand] = Behaviors.setup(context => {
+  def apply(pageRepository: PageRepository): Behavior[Command | PagePersistence.ReadCommand] = Behaviors.setup(context => {
+    val sharding = ClusterSharding(context.system)
+
     Behaviors.receiveMessage({
       case Recover(url) =>
         context.pipeToSelf(pageRepository.findByUrl(url))({
@@ -33,7 +35,8 @@ object PageReader {
         Behaviors.same
 
       case RecoverSuccess(result, replyToUrl) =>
-        pageShardRegion ! ShardingEnvelope(replyToUrl, PageManager.RecoveryResult(result))
+        val pageManager = sharding.entityRefFor(PageManager.TypeKey, replyToUrl)
+        pageManager ! PageManager.RecoveryResult(result)
         Behaviors.same
 
       case FindByStatusSuccess(result, replyTo) =>

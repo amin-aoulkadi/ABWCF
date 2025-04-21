@@ -3,9 +3,9 @@ package abwcf.actors.persistence.page
 import abwcf.actors.PageManager
 import abwcf.actors.persistence.page.PagePersistence.UpdateStatus
 import abwcf.persistence.PageRepository
+import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 
 import scala.util.{Failure, Success}
 
@@ -14,7 +14,9 @@ object PageUpdater {
   private case class FutureSuccess(url: String) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
-  def apply(pageRepository: PageRepository, pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]]): Behavior[Command | PagePersistence.UpdateCommand] = Behaviors.setup(context => {
+  def apply(pageRepository: PageRepository): Behavior[Command | PagePersistence.UpdateCommand] = Behaviors.setup(context => {
+    val sharding = ClusterSharding(context.system)
+
     Behaviors.receiveMessage({
       case UpdateStatus(url, status) =>
         context.pipeToSelf(pageRepository.updateStatus(url, status))({
@@ -24,7 +26,8 @@ object PageUpdater {
         Behaviors.same
 
       case FutureSuccess(url) =>
-        pageShardRegion ! ShardingEnvelope(url, PageManager.UpdateSuccess)
+        val pageManager = sharding.entityRefFor(PageManager.TypeKey, url)
+        pageManager ! PageManager.UpdateSuccess
         Behaviors.same
 
       case FutureFailure(throwable) =>

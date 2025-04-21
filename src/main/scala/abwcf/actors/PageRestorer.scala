@@ -4,7 +4,7 @@ import abwcf.actors.persistence.page.PagePersistence
 import abwcf.data.PageStatus
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 
 import scala.jdk.DurationConverters.*
 
@@ -21,8 +21,9 @@ object PageRestorer {
 
   private type CombinedCommand = Command | PagePersistence.ResultSeq
 
-  def apply(pageShardRegion: ActorRef[ShardingEnvelope[PageManager.Command]], pagePersistenceManager: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+  def apply(pagePersistenceManager: ActorRef[PagePersistence.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withTimers(timers => {
+      val sharding = ClusterSharding(context.system)
       val config = context.system.settings.config
       val initialDelay = config.getDuration("abwcf.page-restorer.initial-delay").toScala
       val restoreDelay = config.getDuration("abwcf.page-restorer.restore-delay").toScala
@@ -37,7 +38,10 @@ object PageRestorer {
 
         case PagePersistence.ResultSeq(pages) =>
           context.log.info("Restoring {} discovered pages (some may already be active)", pages.size)
-          pages.foreach(page => pageShardRegion ! ShardingEnvelope(page.url, PageManager.RecoveryResult(Some(page))))
+          pages.foreach(page => {
+            val pageManager = sharding.entityRefFor(PageManager.TypeKey, page.url)
+            pageManager ! PageManager.RecoveryResult(Some(page))
+          })
           Behaviors.same
       })
     })

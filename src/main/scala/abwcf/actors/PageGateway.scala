@@ -5,7 +5,7 @@ import abwcf.data.{FetchResponse, Page, PageCandidate}
 import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
-import org.apache.pekko.cluster.sharding.typed.ShardingEnvelope
+import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 import org.apache.pekko.http.scaladsl.model.StatusCode
 
 /**
@@ -25,35 +25,36 @@ object PageGateway {
   type CombinedCommand = Command | PagePersistence.Command | Prioritizer.Command
 
   def apply(settings: CrawlerSettings): Behavior[CombinedCommand] = Behaviors.setup(context => {
-    val pageShardRegion = PageManager.getShardRegion(context.system, context.self)
+    val sharding = ClusterSharding(context.system)
 
     val prioritizer = context.spawn(
-      Behaviors.supervise(Prioritizer(settings, pageShardRegion))
+      Behaviors.supervise(Prioritizer(settings))
         .onFailure(SupervisorStrategy.resume), //The Prioritizer is stateless, so resuming it is safe.
       "prioritizer"
     )
 
     val pagePersistenceManager = context.spawn(
-      Behaviors.supervise(PagePersistenceManager(pageShardRegion))
+      Behaviors.supervise(PagePersistenceManager())
         .onFailure(SupervisorStrategy.resume),
       "page-persistence-manager"
     )
 
     val pageRestorer = context.spawn(
-      Behaviors.supervise(PageRestorer(pageShardRegion, pagePersistenceManager))
+      Behaviors.supervise(PageRestorer(pagePersistenceManager))
         .onFailure(SupervisorStrategy.resume), //The PageRestorer is stateless, so resuming it is safe.
       "page-restorer"
     )
 
     val userCodeRunner = context.spawn(
-      Behaviors.supervise(UserCodeRunner(settings, pageShardRegion))
+      Behaviors.supervise(UserCodeRunner(settings))
         .onFailure(SupervisorStrategy.resume), //The UserCodeRunner is stateless, so resuming it is safe.
       "user-code-runner"
     )
 
     Behaviors.receiveMessage({
       case Discover(candidate) => //TODO: Add database lookup (with a small cache).
-        pageShardRegion ! ShardingEnvelope(candidate.url, PageManager.Discover(candidate.crawlDepth))
+        val pageManager = sharding.entityRefFor(PageManager.TypeKey, candidate.url)
+        pageManager ! PageManager.Discover(candidate.crawlDepth)
         Behaviors.same
 
       case FetchSuccess(page, response) =>

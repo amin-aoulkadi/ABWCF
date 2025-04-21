@@ -36,6 +36,8 @@ object Crawler {
         .onFailure(SupervisorStrategy.resume), //The PageGateway is stateless, so resuming it is safe.
       "page-gateway"
     )
+    
+    PageManager.initializeSharding(context.system, pageGateway)
 
     val robotsFilter = context.spawn(
       Behaviors.supervise(RobotsFilter(pageGateway))
