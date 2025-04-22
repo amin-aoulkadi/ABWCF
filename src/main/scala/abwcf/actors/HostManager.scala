@@ -2,13 +2,13 @@ package abwcf.actors
 
 import abwcf.actors.persistence.host.HostPersistence
 import abwcf.data.HostInformation
-import crawlercommons.robots.{SimpleRobotRules, SimpleRobotRulesParser}
+import crawlercommons.robots.{BaseRobotRules, SimpleRobotRules, SimpleRobotRulesParser}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityContext, EntityTypeKey}
 import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, ShardingEnvelope}
 
-import java.time.{Duration, Instant}
+import java.time.Instant
 import java.util.Collections
 
 /**
@@ -62,6 +62,14 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
   import HostManager.*
   //TODO: Passivation.
 
+  private val config = context.system.settings.config
+  private val defaultCrawlDelay = config.getDuration("abwcf.robots.default-crawl-delay").toMillis
+  private val minCrawlDelay = config.getDuration("abwcf.robots.min-crawl-delay").toMillis
+  private val maxCrawlDelay = config.getDuration("abwcf.robots.max-crawl-delay").toMillis
+  private val validRulesLifetime = config.getDuration("abwcf.robots.valid-rules-lifetime")
+  private val unavailableRulesLifetime = config.getDuration("abwcf.robots.unavailable-rules-lifetime")
+  private val unreachableRulesLifetime = config.getDuration("abwcf.robots.unreachable-rules-lifetime")
+
   private def recovering(schemeAndAuthority: String): Behavior[CombinedCommand] = {
     hostPersistenceManager ! HostPersistence.Recover(schemeAndAuthority)
 
@@ -83,7 +91,7 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
 
   private def fetching(schemeAndAuthority: String, expiredHostInfo: Option[HostInformation]): Behavior[CombinedCommand] = {
     val robotsFetcher = context.spawnAnonymous(RobotsFetcher(schemeAndAuthority, context.self))
-    val parser = new SimpleRobotRulesParser(Long.MaxValue, 3) //TODO: Handle max crawl delay.
+    val parser = new SimpleRobotRulesParser(Long.MaxValue, 3) //Disable the built-in maximum crawl delay logic of the SimpleRobotRulesParser.
 
     def nextBehavior(hostInfo: HostInformation) = expiredHostInfo match {
       case Some(_) => persisting(hostInfo, HostPersistence.Update(hostInfo)) //There is already an entry in the database, so it needs to be updated.
@@ -92,29 +100,46 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
 
     Behaviors.receiveMessage({
       case RobotsFetcher.Response(responseBody) =>
+        //Parse the robots.txt file:
         val rules = parser.parseContent(schemeAndAuthority, responseBody.toArray, "text/plain", Collections.emptyList()) //The RobotsFetcher only fetches "text/plain". //TODO: User-agent name.
         rules.sortRules()
-        context.log.info("Processed robots.txt for {} and found {} rules", schemeAndAuthority, rules.getRobotRules.size)
-        val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(Duration.ofHours(24)))
+
+        //Determine the crawl delay:
+        var crawlDelay = rules.getCrawlDelay match {
+          case BaseRobotRules.UNSET_CRAWL_DELAY => defaultCrawlDelay //Use the default crawl delay if none is specified in the robots.txt file.
+          case delay if delay < 0 => defaultCrawlDelay
+          case delay => delay
+        }
+
+        crawlDelay = crawlDelay
+          .max(minCrawlDelay) //Ensure that crawlDelay ≥ minCrawlDelay.
+          .min(maxCrawlDelay) //Ensure that crawlDelay ≤ maxCrawlDelay.
+
+        rules.setCrawlDelay(crawlDelay)
+
+        context.log.info("Processed robots.txt for {}, found {} rules and set the crawl delay to {} ms", schemeAndAuthority, rules.getRobotRules.size, crawlDelay)
+        val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(validRulesLifetime))
         nextBehavior(hostInfo)
 
       case RobotsFetcher.Unavailable =>
         context.log.info("The robots.txt for {} is unavailable, all resources on this host can be crawled", schemeAndAuthority)
         val rules = SimpleRobotRules(SimpleRobotRules.RobotRulesMode.ALLOW_ALL) //If the robots.txt file is unavailable, everything is allowed.
-        val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(Duration.ofHours(24)))
+        rules.setCrawlDelay(defaultCrawlDelay)
+        val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(unavailableRulesLifetime))
         nextBehavior(hostInfo)
 
       case RobotsFetcher.Unreachable =>
         expiredHostInfo match {
           case Some(oldHostInfo) =>
             context.log.info("The robots.txt for {} is unreachable, expired rules for this host will be reused", schemeAndAuthority)
-            val hostInfo = oldHostInfo.copy(validUntil = Instant.now.plus(Duration.ofHours(1)))
+            val hostInfo = oldHostInfo.copy(validUntil = Instant.now.plus(unreachableRulesLifetime))
             persisting(hostInfo, HostPersistence.Update(hostInfo))
 
           case None =>
             context.log.info("The robots.txt for {} is unreachable, this host will not be crawled", schemeAndAuthority)
             val rules = SimpleRobotRules(SimpleRobotRules.RobotRulesMode.ALLOW_NONE) //If the robots.txt file is unreachable, nothing is allowed.
-            val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(Duration.ofHours(1)))
+            rules.setCrawlDelay(defaultCrawlDelay)
+            val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(unreachableRulesLifetime))
             persisting(hostInfo, HostPersistence.Insert(hostInfo))
         }
 
