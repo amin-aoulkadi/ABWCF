@@ -38,26 +38,30 @@ object PageManager {
   case object UpdateSuccess extends PersistenceCommand
 
   def apply(entityContext: EntityContext[Command],
-            pageGateway: ActorRef[PageGateway.CombinedCommand]): Behavior[Command] =
+            pagePersistenceManager: ActorRef[PagePersistence.Command],
+            prioritizer: ActorRef[Prioritizer.Command]): Behavior[Command] =
     Behaviors.setup(context => {
       Behaviors.withStash(100)(buffer => {
-        new PageManager(pageGateway, entityContext.shard, context, buffer).recovering(entityContext.entityId)
+        new PageManager(pagePersistenceManager, prioritizer, entityContext.shard, context, buffer).recovering(entityContext.entityId)
       })
   })
 
-  def initializeSharding(system: ActorSystem[?], pageGateway: ActorRef[PageGateway.CombinedCommand]): ActorRef[ShardingEnvelope[Command]] = {
+  def initializeSharding(system: ActorSystem[?],
+                         pagePersistenceManager: ActorRef[PagePersistence.Command],
+                         prioritizer: ActorRef[Prioritizer.Command]): ActorRef[ShardingEnvelope[Command]] = {
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
       .withNoPassivationStrategy() //Disable automatic passivation.
 
     ClusterSharding(system).init(
-      Entity(TypeKey)(entityContext => PageManager(entityContext, pageGateway))
+      Entity(TypeKey)(entityContext => PageManager(entityContext, pagePersistenceManager, prioritizer))
         .withSettings(settings)
     )
   }
 }
 
-private class PageManager private(pageGateway: ActorRef[PageGateway.CombinedCommand],
+private class PageManager private(pagePersistenceManager: ActorRef[PagePersistence.Command],
+                                  prioritizer: ActorRef[Prioritizer.Command],
                                   shard: ActorRef[ClusterSharding.ShardCommand],
                                   context: ActorContext[PageManager.Command],
                                   buffer: StashBuffer[PageManager.Command]) {
@@ -77,7 +81,7 @@ private class PageManager private(pageGateway: ActorRef[PageGateway.CombinedComm
   }
 
   private def recovering(url: String): Behavior[Command] = {
-    pageGateway ! PagePersistence.Recover(url)
+    pagePersistenceManager ! PagePersistence.Recover(url)
 
     Behaviors.receiveMessage({
       case RecoveryResult(None) =>
@@ -106,7 +110,7 @@ private class PageManager private(pageGateway: ActorRef[PageGateway.CombinedComm
   })
 
   private def prioritizing(candidate: PageCandidate): Behavior[Command] = {
-    pageGateway ! Prioritizer.Prioritize(candidate)
+    prioritizer ! Prioritizer.Prioritize(candidate)
 
     Behaviors.receiveMessage({
       case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
@@ -122,7 +126,7 @@ private class PageManager private(pageGateway: ActorRef[PageGateway.CombinedComm
   }
 
   private def inserting(page: Page): Behavior[Command] = {
-    pageGateway ! PagePersistence.Insert(page)
+    pagePersistenceManager ! PagePersistence.Insert(page)
 
     Behaviors.receiveMessage({
       case Discover(_) => Behaviors.same //The crawler can discover the same page multiple times, but it doesn't need to fetch the same page multiple times.
@@ -140,7 +144,7 @@ private class PageManager private(pageGateway: ActorRef[PageGateway.CombinedComm
 
     Behaviors.receiveMessage({
       case Success | Redirect | Error =>
-        pageGateway ! PagePersistence.UpdateStatus(page.url, PageStatus.Processed)
+        pagePersistenceManager ! PagePersistence.UpdateStatus(page.url, PageStatus.Processed)
         updating(page.copy(status = PageStatus.Processed))
 
       case Passivate =>

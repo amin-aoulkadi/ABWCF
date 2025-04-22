@@ -3,8 +3,8 @@ package abwcf.actors
 import abwcf.data.{HostInformation, PageCandidate}
 import abwcf.util.UrlUtils
 import com.github.benmanes.caffeine.cache.{Caffeine, Expiry}
+import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 
 import java.time.Instant
@@ -27,7 +27,7 @@ object RobotsFilter {
 
   private type CombinedCommand = Command | HostManager.HostInfo
 
-  def apply(pageGateway: ActorRef[PageGateway.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+  def apply(): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     val sharding = ClusterSharding(context.system)
 
     val cache = Caffeine.newBuilder() //Mutable state!
@@ -53,7 +53,8 @@ object RobotsFilter {
         } else {
           //Filter the URL:
           if (hostInfo.robotRules.isAllowed(candidate.url)) {
-            pageGateway ! PageGateway.Discover(candidate)
+            val pageManager = sharding.entityRefFor(PageManager.TypeKey, candidate.url)
+            pageManager ! PageManager.Discover(candidate.crawlDepth)
           }
         }
 
@@ -66,7 +67,10 @@ object RobotsFilter {
         pendingCandidates.remove(hostInfo.schemeAndAuthority)
           .getOrElse(mutable.ArrayBuffer.empty)
           .filter(candidate => hostInfo.robotRules.isAllowed(candidate.url))
-          .foreach(candidate => pageGateway ! PageGateway.Discover(candidate))
+          .foreach(candidate => {
+            val pageManager = sharding.entityRefFor(PageManager.TypeKey, candidate.url)
+            pageManager ! PageManager.Discover(candidate.crawlDepth)
+          })
 
         Behaviors.same
     })

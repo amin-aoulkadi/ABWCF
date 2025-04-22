@@ -2,6 +2,7 @@ package abwcf.actors
 
 import abwcf.actors.fetching.FetcherManager
 import abwcf.actors.persistence.host.HostPersistenceManager
+import abwcf.actors.persistence.page.PagePersistenceManager
 import abwcf.data.PageCandidate
 import abwcf.persistence.SlickSessionContainer
 import abwcf.util.CrawlerSettings
@@ -31,16 +32,34 @@ object Crawler {
     HostManager.initializeSharding(context.system, hostPersistenceManager)
     HostQueue.initializeSharding(context.system)
 
-    val pageGateway = context.spawn(
-      Behaviors.supervise(PageGateway(settings))
-        .onFailure(SupervisorStrategy.resume), //The PageGateway is stateless, so resuming it is safe.
-      "page-gateway"
+    val pagePersistenceManager = context.spawn(
+      Behaviors.supervise(PagePersistenceManager())
+        .onFailure(SupervisorStrategy.resume),
+      "page-persistence-manager"
     )
-    
-    PageManager.initializeSharding(context.system, pageGateway)
+
+    val prioritizer = context.spawn(
+      Behaviors.supervise(Prioritizer(settings))
+        .onFailure(SupervisorStrategy.resume), //The Prioritizer is stateless, so resuming it is safe.
+      "prioritizer"
+    )
+
+    PageManager.initializeSharding(context.system, pagePersistenceManager, prioritizer)
+
+    val pageRestorer = context.spawn(
+      Behaviors.supervise(PageRestorer(pagePersistenceManager))
+        .onFailure(SupervisorStrategy.resume), //The PageRestorer is stateless, so resuming it is safe.
+      "page-restorer"
+    )
+
+    val userCodeRunner = context.spawn(
+      Behaviors.supervise(UserCodeRunner(settings))
+        .onFailure(SupervisorStrategy.resume), //The UserCodeRunner is stateless, so resuming it is safe.
+      "user-code-runner"
+    )
 
     val robotsFilter = context.spawn(
-      Behaviors.supervise(RobotsFilter(pageGateway))
+      Behaviors.supervise(RobotsFilter())
         .onFailure(SupervisorStrategy.resume), //Restarting would mean losing all pending candidates and repopulating the cache (which is rather expensive).
       "robots-filter"
     )
@@ -76,7 +95,7 @@ object Crawler {
     )
 
     val fetcherManager = context.spawn(
-      Behaviors.supervise(FetcherManager(crawlDepthLimiter, hostQueueRouter, pageGateway, urlNormalizer))
+      Behaviors.supervise(FetcherManager(crawlDepthLimiter, hostQueueRouter, urlNormalizer, userCodeRunner))
         .onFailure(SupervisorStrategy.restart),
       "fetcher-manager"
     )

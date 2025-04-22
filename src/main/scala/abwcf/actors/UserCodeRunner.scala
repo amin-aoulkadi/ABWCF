@@ -36,7 +36,7 @@ object UserCodeRunner {
         pageManager ! PageManager.Redirect //Tell the PageManager that the page has been processed.
         Behaviors.same
 
-      case ProcessError(page, statusCode) =>
+      case ProcessError(page, statusCode) => //TODO: Maybe let the user code decide whether to try again later or not.
         settings.userCode.onFetchError(page, statusCode, context)
         val pageManager = sharding.entityRefFor(PageManager.TypeKey, page.url)
         pageManager ! PageManager.Error //Tell the PageManager that the page has been processed.
