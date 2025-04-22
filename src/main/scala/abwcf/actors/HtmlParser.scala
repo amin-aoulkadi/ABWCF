@@ -6,6 +6,7 @@ import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.ByteString
 import org.jsoup.Jsoup
 
+import java.util.Locale
 import scala.jdk.StreamConverters.StreamHasToScala
 
 /**
@@ -27,7 +28,7 @@ object HtmlParser {
         .stream()
         .map(_.absUrl("href"))
         .distinct()
-        .filter(_.startsWith("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
+        .filter(_.substring(0, 4).toLowerCase(Locale.ROOT).equals("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
         .toScala(List)
 
       //Send the URLs to the UrlNormalizer:
