@@ -22,13 +22,13 @@ object UrlFilter {
 
   def apply(robotsFilter: ActorRef[RobotsFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
-    val maxUrlLength = config.getInt("abwcf.url-filter.max-url-length")
+    val maxUrlLength = config.getInt("abwcf.actors.url-filter.max-url-length")
 
-    val mustMatch = config.getStringList("abwcf.url-filter.must-match")
+    val mustMatch = config.getStringList("abwcf.actors.url-filter.must-match")
       .asScala
       .map(Regex(_))
 
-    val mustNotMatch = config.getStringList("abwcf.url-filter.must-not-match")
+    val mustNotMatch = config.getStringList("abwcf.actors.url-filter.must-not-match")
       .asScala
       .map(Regex(_))
 

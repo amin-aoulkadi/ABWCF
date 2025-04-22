@@ -18,7 +18,7 @@ object CrawlDepthLimiter {
 
   def apply(htmlParser: ActorRef[HtmlParser.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
-    val maxCrawlDepth = config.getInt("abwcf.crawl-depth-limiter.max-crawl-depth")
+    val maxCrawlDepth = config.getInt("abwcf.actors.crawl-depth-limiter.max-crawl-depth")
 
     Behaviors.receiveMessage({
       case CheckDepth(page, responseBody) =>

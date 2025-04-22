@@ -56,8 +56,8 @@ private class HostQueue private (shard: ActorRef[ClusterSharding.ShardCommand],
   import HostQueue.*
 
   private val config = context.system.settings.config
-  private val crawlDelay = config.getDuration("abwcf.host-queue.crawl-delay")
-  private val receiveTimeout = config.getDuration("abwcf.host-queue.passivation-receive-timeout").toScala
+  private val crawlDelay = config.getDuration("abwcf.actors.host-queue.crawl-delay")
+  private val receiveTimeout = config.getDuration("abwcf.actors.host-queue.passivation-receive-timeout").toScala
 
   private def queue(pages: mutable.PriorityQueue[Page], crawlDelayEnd: Instant): Behavior[Command] = {
     //Disable passivation and register with the receptionist:

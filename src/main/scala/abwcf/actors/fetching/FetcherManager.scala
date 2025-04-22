@@ -27,8 +27,8 @@ object FetcherManager {
     Behaviors.setup[CombinedCommand](context => {
       Behaviors.withTimers(timers => {
         val config = context.system.settings.config
-        val initialDelay = config.getDuration("abwcf.fetcher-manager.initial-delay").toScala
-        val managementDelay = config.getDuration("abwcf.fetcher-manager.management-delay").toScala
+        val initialDelay = config.getDuration("abwcf.actors.fetcher-manager.initial-delay").toScala
+        val managementDelay = config.getDuration("abwcf.actors.fetcher-manager.management-delay").toScala
 
         val managementDataAggregator = context.spawn(
           Behaviors.supervise(ManagementDataAggregator(context.self))

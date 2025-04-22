@@ -25,8 +25,8 @@ object PageRestorer {
     Behaviors.withTimers(timers => {
       val sharding = ClusterSharding(context.system)
       val config = context.system.settings.config
-      val initialDelay = config.getDuration("abwcf.page-restorer.initial-delay").toScala
-      val restoreDelay = config.getDuration("abwcf.page-restorer.restore-delay").toScala
+      val initialDelay = config.getDuration("abwcf.actors.page-restorer.initial-delay").toScala
+      val restoreDelay = config.getDuration("abwcf.actors.page-restorer.restore-delay").toScala
 
       //Periodically attempt to restore pages:
       timers.startTimerWithFixedDelay(RestorePages, initialDelay, restoreDelay)

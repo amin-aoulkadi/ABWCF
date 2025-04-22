@@ -51,9 +51,9 @@ private class RobotsFetcher private (schemeAndAuthority: String,
   import RobotsFetcher.*
 
   private val config = context.system.settings.config
-  private val maxContentLength = config.getBytes("abwcf.robots-fetcher.max-content-length")
-  private val bytesPerSec = config.getBytes("abwcf.robots-fetcher.bandwidth-budget-per-file").toInt
-  private val maxRedirects = config.getInt("abwcf.robots-fetcher.max-redirects")
+  private val maxContentLength = config.getBytes("abwcf.actors.robots-fetcher.max-content-length")
+  private val bytesPerSec = config.getBytes("abwcf.actors.robots-fetcher.bandwidth-budget-per-file").toInt
+  private val maxRedirects = config.getInt("abwcf.actors.robots-fetcher.max-redirects")
 
   private def sendRequest(url: String, redirectCounter: Int): Behavior[Command] = {
     context.log.info("Fetching {}", url)

@@ -42,10 +42,10 @@ private class UrlSupplier private(fetcher: ActorRef[Fetcher.Command],
   import UrlSupplier.*
 
   private val config = context.system.settings.config
-  private val askTimeout = config.getDuration("abwcf.url-supplier.ask-timeout").toScala
-  private val burstLength = config.getInt("abwcf.url-supplier.burst-length")
-  private val minDelay = FiniteDuration(config.getInt("abwcf.url-supplier.min-delay"), TimeUnit.MILLISECONDS)
-  private val maxDelay = FiniteDuration(config.getInt("abwcf.url-supplier.max-delay"), TimeUnit.MILLISECONDS)
+  private val askTimeout = config.getDuration("abwcf.actors.url-supplier.ask-timeout").toScala
+  private val burstLength = config.getInt("abwcf.actors.url-supplier.burst-length")
+  private val minDelay = FiniteDuration(config.getInt("abwcf.actors.url-supplier.min-delay"), TimeUnit.MILLISECONDS)
+  private val maxDelay = FiniteDuration(config.getInt("abwcf.actors.url-supplier.max-delay"), TimeUnit.MILLISECONDS)
 
   /**
    * Asks the HostQueueRouter for a URL.

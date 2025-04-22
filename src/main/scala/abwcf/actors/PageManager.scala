@@ -65,7 +65,7 @@ private class PageManager private(pageGateway: ActorRef[PageGateway.CombinedComm
 
   private val sharding = ClusterSharding(context.system)
   private val config = context.system.settings.config
-  private val receiveTimeout = config.getDuration("abwcf.page-manager.passivation-receive-timeout").toScala
+  private val receiveTimeout = config.getDuration("abwcf.actors.page-manager.passivation-receive-timeout").toScala
 
   /**
    * Adds the URL to a [[HostQueue]] so that it can be fetched.

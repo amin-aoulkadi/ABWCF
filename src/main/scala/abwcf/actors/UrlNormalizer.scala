@@ -26,9 +26,9 @@ object UrlNormalizer {
 
   def apply(urlFilter: ActorRef[UrlFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
-    val removeUserInfo = config.getBoolean("abwcf.url-normalizer.remove-userinfo")
-    val removeQuery = config.getBoolean("abwcf.url-normalizer.remove-query")
-    val removeFragment = config.getBoolean("abwcf.url-normalizer.remove-fragment")
+    val removeUserInfo = config.getBoolean("abwcf.actors.url-normalizer.remove-userinfo")
+    val removeQuery = config.getBoolean("abwcf.actors.url-normalizer.remove-query")
+    val removeFragment = config.getBoolean("abwcf.actors.url-normalizer.remove-fragment")
 
     Behaviors.receiveMessage({
       case Normalize(candidate) =>
