@@ -4,6 +4,7 @@ import abwcf.data.{Page, PageStatus}
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.connectors.slick.scaladsl.{Slick, SlickSession}
 import org.apache.pekko.stream.scaladsl.Sink
+import slick.jdbc.GetResult
 
 import scala.concurrent.Future
 
@@ -11,47 +12,25 @@ class SlickPageRepository(implicit val materializer: Materializer) extends PageR
   private implicit val session: SlickSession = SlickSessionContainer.getSession
   import session.profile.api.*
 
-  private implicit val statusMapper: BaseColumnType[PageStatus] = MappedColumnType.base[PageStatus, String](
-    status => status.toString,
-    string => PageStatus.valueOf(string)
-  )
-
-  private class PageTable(tag: Tag) extends Table[Page](tag, None, "pages") {
-    def url = column[String]("url")
-    def status = column[PageStatus]("status")
-    def crawlDepth = column[Int]("crawl_depth")
-    def crawlPriority = column[Long]("crawl_priority")
-
-    override def * = (url, status, crawlDepth, crawlPriority).mapTo[Page]
-  }
-
-  private lazy val pages = TableQuery[PageTable]
+  private implicit val getPageResult: GetResult[Page] = GetResult(r => Page(r.<<, PageStatus.valueOf(r.<<), r.<<, r.<<))
 
   override def insert(page: Page): Future[Int] = {
-    session.db.run(pages += page)
+    val query = sqlu"""INSERT INTO pages VALUES (${page.url}, ${page.status.toString}, ${page.crawlDepth}, ${page.crawlPriority})"""
+    session.db.run(query)
   }
 
   override def updateStatus(url: String, status: PageStatus): Future[Int] = {
-    val query = pages
-      .filter(_.url === url)
-      .map(_.status)
-      .update(status)
-
+    val query = sqlu"""UPDATE pages SET status = ${status.toString} WHERE url = $url"""
     session.db.run(query)
   }
 
   override def findByUrl(url: String): Future[Option[Page]] = {
-    val query = pages.filter(_.url === url).result
+    val query = sql"""SELECT * FROM pages WHERE url = $url""".as[Page]
     Slick.source(query).runWith(Sink.headOption)
   }
 
   override def findByStatusOrderByCrawlPriorityDesc(status: PageStatus, limit: Int): Future[Seq[Page]] = {
-    val query = pages
-      .filter(_.status === status)
-      .sortBy(_.crawlPriority.desc)
-      .take(limit)
-      .result
-
+    val query = sql"""SELECT * FROM pages WHERE status = ${status.toString} ORDER BY crawl_priority DESC LIMIT $limit""".as[Page]
     Slick.source(query).runWith(Sink.seq)
   }
 }
