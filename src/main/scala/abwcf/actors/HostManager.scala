@@ -10,6 +10,7 @@ import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, Shardin
 
 import java.time.Instant
 import java.util.Collections
+import scala.jdk.DurationConverters.*
 
 /**
  * Represents a host and the associated [[HostInformation]].
@@ -27,6 +28,7 @@ object HostManager {
 
   sealed trait Command
   case class GetHostInfo(replyTo: ActorRef[HostInfo]) extends Command
+  private case object Passivate extends Command
 
   sealed trait PersistenceCommand extends Command //These have to be part of the public protocol so that they work with ShardingEnvelopes.
   case class RecoveryResult(result: Option[HostInformation]) extends PersistenceCommand
@@ -40,7 +42,7 @@ object HostManager {
 
   def apply(entityContext: EntityContext[Command], hostPersistenceManager: ActorRef[HostPersistence.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     Behaviors.withStash(100)(buffer => { //TODO: The stash can fill up with GetHostInfo messages.
-      new HostManager(hostPersistenceManager, context, buffer).recovering(entityContext.entityId)
+      new HostManager(hostPersistenceManager, entityContext.shard, context, buffer).recovering(entityContext.entityId)
     })
   }).narrow
 
@@ -57,10 +59,10 @@ object HostManager {
 }
 
 private class HostManager private (hostPersistenceManager: ActorRef[HostPersistence.Command],
+                                   shard: ActorRef[ClusterSharding.ShardCommand],
                                    context: ActorContext[HostManager.CombinedCommand],
                                    buffer: StashBuffer[HostManager.CombinedCommand]) {
   import HostManager.*
-  //TODO: Passivation.
 
   private val config = context.system.settings.config
   private val defaultCrawlDelay = config.getDuration("abwcf.robots.default-crawl-delay").toMillis
@@ -69,6 +71,7 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
   private val validRulesLifetime = config.getDuration("abwcf.robots.valid-rules-lifetime")
   private val unavailableRulesLifetime = config.getDuration("abwcf.robots.unavailable-rules-lifetime")
   private val unreachableRulesLifetime = config.getDuration("abwcf.robots.unreachable-rules-lifetime")
+  private val receiveTimeout = config.getDuration("abwcf.actors.host-manager.passivation-receive-timeout").toScala
 
   private def recovering(schemeAndAuthority: String): Behavior[CombinedCommand] = {
     hostPersistenceManager ! HostPersistence.Recover(schemeAndAuthority)
@@ -162,15 +165,23 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
     })
   }
 
-  private def knownHost(hostInfo: HostInformation): Behavior[CombinedCommand] = Behaviors.receiveMessage({
-    case request: GetHostInfo if hostInfo.isExpired =>
-      buffer.stash(request)
-      fetching(hostInfo.schemeAndAuthority, Some(hostInfo)) //Fetch the robots.txt file again.
+  private def knownHost(hostInfo: HostInformation): Behavior[CombinedCommand] = {
+    context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
 
-    case GetHostInfo(replyTo) =>
-      replyTo ! HostInfo(hostInfo)
-      Behaviors.same
+    Behaviors.receiveMessage({
+      case request: GetHostInfo if hostInfo.isExpired =>
+        buffer.stash(request)
+        fetching(hostInfo.schemeAndAuthority, Some(hostInfo)) //Fetch the robots.txt file again.
 
-    case _ => Behaviors.same
-  })
+      case GetHostInfo(replyTo) =>
+        replyTo ! HostInfo(hostInfo)
+        Behaviors.same
+
+      case Passivate =>
+        shard ! ClusterSharding.Passivate(context.self)
+        Behaviors.same
+
+      case _ => Behaviors.same
+    })
+  }
 }
