@@ -2,12 +2,12 @@ package abwcf.actors
 
 import abwcf.actors.persistence.page.PagePersistence
 import abwcf.data.{Page, PageCandidate, PageStatus}
+import abwcf.util.UrlUtils
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityContext, EntityTypeKey}
 import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, ShardingEnvelope}
 
-import java.net.URI
 import scala.jdk.DurationConverters.*
 
 /**
@@ -75,8 +75,7 @@ private class PageManager private(pagePersistenceManager: ActorRef[PagePersisten
    * Adds the URL to a [[HostQueue]] so that it can be fetched.
    */
   private def addToHostQueue(page: Page): Unit = {
-    val host = URI(page.url).getHost
-    val hostQueue = sharding.entityRefFor(HostQueue.TypeKey, host)
+    val hostQueue = sharding.entityRefFor(HostQueue.TypeKey, UrlUtils.getSchemeAndAuthority(page.url))
     hostQueue ! HostQueue.Enqueue(page)
   }
 
