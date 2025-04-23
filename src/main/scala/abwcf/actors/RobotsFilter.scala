@@ -29,9 +29,11 @@ object RobotsFilter {
 
   def apply(): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
     val sharding = ClusterSharding(context.system)
+    val config = context.system.settings.config
+    val maxCacheSize = config.getLong("abwcf.actors.robots-filter.max-cache-size")
 
-    val cache = Caffeine.newBuilder() //Mutable state!
-      .maximumSize(1000) //TODO: Add to config.
+    val hostInfoCache = Caffeine.newBuilder() //Mutable state!
+      .maximumSize(maxCacheSize)
       .expireAfter(Expiry.writing[String, HostInformation]((_, hostInfo) => Instant.now.until(hostInfo.validUntil)))
       .build[String, HostInformation]()
 
@@ -40,7 +42,7 @@ object RobotsFilter {
     Behaviors.receiveMessage({
       case Filter(candidate) =>
         val schemeAndAuthority = UrlUtils.getSchemeAndAuthority(candidate.url)
-        val hostInfo = cache.getIfPresent(schemeAndAuthority)
+        val hostInfo = hostInfoCache.getIfPresent(schemeAndAuthority)
 
         if (hostInfo == null) {
           //Buffer the URL:
@@ -61,7 +63,7 @@ object RobotsFilter {
         Behaviors.same
 
       case HostManager.HostInfo(hostInfo) =>
-        cache.put(hostInfo.schemeAndAuthority, hostInfo)
+        hostInfoCache.put(hostInfo.schemeAndAuthority, hostInfo)
 
         //Filter the buffered URLs:
         pendingCandidates.remove(hostInfo.schemeAndAuthority)
