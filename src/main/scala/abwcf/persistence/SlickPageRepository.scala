@@ -8,14 +8,15 @@ import slick.jdbc.GetResult
 
 import scala.concurrent.Future
 
-class SlickPageRepository(implicit val materializer: Materializer) extends PageRepository {
-  private implicit val session: SlickSession = SlickSessionContainer.getSession
+class SlickPageRepository(using materializer: Materializer) extends PageRepository {
+  private val session = SlickSessionContainer.getSession
+  private given givenSession: SlickSession = session
   import session.profile.api.*
 
   /**
    * Converts a result set to a [[Page]] instance.
    */
-  private implicit val getPageResult: GetResult[Page] = GetResult(r => Page(r.<<, PageStatus.valueOf(r.<<), r.<<, r.<<))
+  private given getPageResult: GetResult[Page] = GetResult(r => Page(r.<<, PageStatus.valueOf(r.<<), r.<<, r.<<))
 
   override def insert(page: Page): Future[Int] = {
     val query = sqlu"""INSERT INTO pages VALUES (${page.url}, ${page.status.toString}, ${page.crawlDepth}, ${page.crawlPriority})"""

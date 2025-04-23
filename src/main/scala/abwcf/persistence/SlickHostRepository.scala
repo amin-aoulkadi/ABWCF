@@ -11,14 +11,15 @@ import java.sql.Timestamp
 import java.util.stream.Collectors
 import scala.concurrent.Future
 
-class SlickHostRepository(implicit val materializer: Materializer) extends HostRepository {
-  private implicit val session: SlickSession = SlickSessionContainer.getSession
+class SlickHostRepository(using materializer: Materializer) extends HostRepository {
+  private val session = SlickSessionContainer.getSession
+  private given givenSession: SlickSession = session
   import session.profile.api.*
 
   /**
    * Converts a result set to a [[HostInformation]] instance.
    */
-  private implicit val getHostInformationResult: GetResult[HostInformation] = GetResult(result => {
+  private given getHostInformationResult: GetResult[HostInformation] = GetResult(result => {
     val schemeAndAuthority = result.nextString()
     val rules = result.nextString()
     val crawlDelay = result.nextLong()

@@ -16,7 +16,7 @@ import org.apache.pekko.stream.Materializer
 object PagePersistenceManager {
   def apply(): Behavior[PagePersistence.Command] = Behaviors.setup(context => {
     val materializer = Materializer(context)
-    val pageRepository = new SlickPageRepository()(using materializer)
+    val pageRepository = new SlickPageRepository(using materializer)
 
     val pageInserter = context.spawnAnonymous(PageInserter(pageRepository)) //TODO: Supervise.
     val pageReader = context.spawnAnonymous(PageReader(pageRepository))

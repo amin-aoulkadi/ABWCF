@@ -16,7 +16,7 @@ import org.apache.pekko.stream.Materializer
 object HostPersistenceManager {
   def apply(): Behavior[HostPersistence.Command] = Behaviors.setup(context => {
     val materializer = Materializer(context)
-    val hostRepository = new SlickHostRepository()(using materializer)
+    val hostRepository = new SlickHostRepository(using materializer)
 
     val hostInserter = context.spawnAnonymous(HostInserter(hostRepository)) //TODO: Supervise.
     val hostReader = context.spawnAnonymous(HostReader(hostRepository))
