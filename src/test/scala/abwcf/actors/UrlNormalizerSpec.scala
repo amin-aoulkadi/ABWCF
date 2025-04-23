@@ -11,9 +11,9 @@ import org.scalatest.prop.Tables.Table
 class UrlNormalizerSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
   private val config = ConfigFactory.parseString(
       """
-        abwcf.url-normalizer.remove-userinfo = true
-        abwcf.url-normalizer.remove-query = true
-        abwcf.url-normalizer.remove-fragment = true
+        abwcf.actors.url-normalizer.remove-userinfo = true
+        abwcf.actors.url-normalizer.remove-query = true
+        abwcf.actors.url-normalizer.remove-fragment = true
         """)
     .withFallback(BehaviorTestKit.ApplicationTestConfig)
 
