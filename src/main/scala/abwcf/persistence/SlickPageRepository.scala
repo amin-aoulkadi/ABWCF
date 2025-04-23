@@ -12,6 +12,9 @@ class SlickPageRepository(implicit val materializer: Materializer) extends PageR
   private implicit val session: SlickSession = SlickSessionContainer.getSession
   import session.profile.api.*
 
+  /**
+   * Converts a result set to a [[Page]] instance.
+   */
   private implicit val getPageResult: GetResult[Page] = GetResult(r => Page(r.<<, PageStatus.valueOf(r.<<), r.<<, r.<<))
 
   override def insert(page: Page): Future[Int] = {
