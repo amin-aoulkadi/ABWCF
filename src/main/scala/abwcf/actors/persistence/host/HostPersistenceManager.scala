@@ -1,10 +1,9 @@
 package abwcf.actors.persistence.host
 
 import abwcf.actors.persistence.host.HostPersistence.{Insert, Recover, Update}
-import abwcf.persistence.SlickHostRepository
+import abwcf.persistence.HostRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.stream.Materializer
 
 /**
  * Manages communication with the [[abwcf.data.HostInformation]] database.
@@ -14,10 +13,7 @@ import org.apache.pekko.stream.Materializer
  * This actor is stateless.
  */
 object HostPersistenceManager {
-  def apply(): Behavior[HostPersistence.Command] = Behaviors.setup(context => {
-    val materializer = Materializer(context)
-    val hostRepository = new SlickHostRepository(using materializer)
-
+  def apply(hostRepository: HostRepository): Behavior[HostPersistence.Command] = Behaviors.setup(context => {
     val hostInserter = context.spawnAnonymous(HostInserter(hostRepository)) //TODO: Supervise.
     val hostReader = context.spawnAnonymous(HostReader(hostRepository))
     val hostUpdater = context.spawnAnonymous(HostUpdater(hostRepository))

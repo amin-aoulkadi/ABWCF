@@ -4,10 +4,11 @@ import abwcf.actors.fetching.FetcherManager
 import abwcf.actors.persistence.host.HostPersistenceManager
 import abwcf.actors.persistence.page.PagePersistenceManager
 import abwcf.data.PageCandidate
-import abwcf.persistence.SlickSessionContainer
+import abwcf.persistence.{CoordinatedSlickSession, SlickHostRepository, SlickPageRepository}
 import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
+import org.apache.pekko.stream.Materializer
 
 import java.net.URISyntaxException
 
@@ -21,22 +22,26 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
 
   def apply(settings: CrawlerSettings = CrawlerSettings()): Behavior[Command] = Behaviors.setup(context => {
-    SlickSessionContainer.initialize(context.system) //Initialize database connection resources.
+    //Initialize database resources:
+    val session = CoordinatedSlickSession.create(context.system)
+    val materializer = Materializer.matFromSystem(context.system)
+    val hostRepository = new SlickHostRepository(using session, materializer)
+    val pageRepository = new SlickPageRepository(using session, materializer)
 
     val hostPersistenceManager = context.spawn(
-      Behaviors.supervise(HostPersistenceManager())
+      Behaviors.supervise(HostPersistenceManager(hostRepository))
         .onFailure(SupervisorStrategy.resume),
       "host-persistence-manager"
     )
 
-    HostManager.initializeSharding(context.system, hostPersistenceManager)
-    HostQueue.initializeSharding(context.system)
-
     val pagePersistenceManager = context.spawn(
-      Behaviors.supervise(PagePersistenceManager())
+      Behaviors.supervise(PagePersistenceManager(pageRepository))
         .onFailure(SupervisorStrategy.resume),
       "page-persistence-manager"
     )
+
+    HostManager.initializeSharding(context.system, hostPersistenceManager)
+    HostQueue.initializeSharding(context.system)
 
     val prioritizer = context.spawn(
       Behaviors.supervise(Prioritizer(settings))

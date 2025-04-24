@@ -1,10 +1,9 @@
 package abwcf.actors.persistence.page
 
 import abwcf.actors.persistence.page.PagePersistence.{FindByStatus, Insert, Recover, UpdateStatus}
-import abwcf.persistence.SlickPageRepository
+import abwcf.persistence.PageRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.stream.Materializer
 
 /**
  * Manages communication with the [[abwcf.data.Page]] database.
@@ -14,10 +13,7 @@ import org.apache.pekko.stream.Materializer
  * This actor is stateless.
  */
 object PagePersistenceManager {
-  def apply(): Behavior[PagePersistence.Command] = Behaviors.setup(context => {
-    val materializer = Materializer(context)
-    val pageRepository = new SlickPageRepository(using materializer)
-
+  def apply(pageRepository: PageRepository): Behavior[PagePersistence.Command] = Behaviors.setup(context => {
     val pageInserter = context.spawnAnonymous(PageInserter(pageRepository)) //TODO: Supervise.
     val pageReader = context.spawnAnonymous(PageReader(pageRepository))
     val pageUpdater = context.spawnAnonymous(PageUpdater(pageRepository))

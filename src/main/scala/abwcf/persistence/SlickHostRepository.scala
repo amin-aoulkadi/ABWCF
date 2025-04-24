@@ -11,9 +11,7 @@ import java.sql.Timestamp
 import java.util.stream.Collectors
 import scala.concurrent.Future
 
-class SlickHostRepository(using materializer: Materializer) extends HostRepository {
-  private val session = SlickSessionContainer.getSession
-  private given givenSession: SlickSession = session
+class SlickHostRepository(using session: SlickSession, materializer: Materializer) extends HostRepository {
   import session.profile.api.*
 
   /**

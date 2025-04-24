@@ -8,9 +8,7 @@ import slick.jdbc.GetResult
 
 import scala.concurrent.Future
 
-class SlickPageRepository(using materializer: Materializer) extends PageRepository {
-  private val session = SlickSessionContainer.getSession
-  private given givenSession: SlickSession = session
+class SlickPageRepository(using session: SlickSession, materializer: Materializer) extends PageRepository {
   import session.profile.api.*
 
   /**
