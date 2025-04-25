@@ -10,7 +10,8 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity
 import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, ShardingEnvelope}
 
 import java.time.Instant
-import java.util.Collections
+import java.util.Locale
+import java.util.stream.Collectors
 import scala.jdk.DurationConverters.*
 
 /**
@@ -66,6 +67,9 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
   import HostManager.*
 
   private val config = context.system.settings.config
+  private val userAgents = config.getStringList("abwcf.robots.user-agents").stream()
+    .map(_.toLowerCase(Locale.ROOT)) //The SimpleRobotRulesParser expects product tokens in lowercase.
+    .collect(Collectors.toList)
   private val defaultCrawlDelay = config.getDuration("abwcf.robots.default-crawl-delay").toMillis
   private val minCrawlDelay = config.getDuration("abwcf.robots.min-crawl-delay").toMillis
   private val maxCrawlDelay = config.getDuration("abwcf.robots.max-crawl-delay").toMillis
@@ -105,7 +109,7 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
     Behaviors.receiveMessage({
       case RobotsFetcher.Response(responseBody) =>
         //Parse the robots.txt file:
-        val rules = parser.parseContent(schemeAndAuthority, responseBody.toArray, "text/plain", Collections.emptyList()) //The RobotsFetcher only fetches "text/plain". //TODO: User-agent name.
+        val rules = parser.parseContent(schemeAndAuthority, responseBody.toArray, "text/plain", userAgents) //The RobotsFetcher only fetches "text/plain".
         rules.sortRules()
 
         //Determine the crawl delay:
