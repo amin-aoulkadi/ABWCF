@@ -2,6 +2,7 @@ package abwcf.actors
 
 import abwcf.actors.persistence.host.HostPersistence
 import abwcf.data.HostInformation
+import crawlercommons.robots.SimpleRobotRules.RobotRulesMode
 import crawlercommons.robots.{BaseRobotRules, SimpleRobotRules, SimpleRobotRulesParser}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
@@ -126,7 +127,7 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
 
       case RobotsFetcher.Unavailable =>
         context.log.info("The robots.txt for {} is unavailable, all resources on this host can be crawled", schemeAndAuthority)
-        val rules = SimpleRobotRules(SimpleRobotRules.RobotRulesMode.ALLOW_ALL) //If the robots.txt file is unavailable, everything is allowed.
+        val rules = new SimpleRobotRules(RobotRulesMode.ALLOW_ALL) //If the robots.txt file is unavailable, everything is allowed.
         rules.setCrawlDelay(defaultCrawlDelay)
         val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(unavailableRulesLifetime))
         nextBehavior(hostInfo)
@@ -140,7 +141,7 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
 
           case None =>
             context.log.info("The robots.txt for {} is unreachable, this host will not be crawled", schemeAndAuthority)
-            val rules = SimpleRobotRules(SimpleRobotRules.RobotRulesMode.ALLOW_NONE) //If the robots.txt file is unreachable, nothing is allowed.
+            val rules = new SimpleRobotRules(RobotRulesMode.ALLOW_NONE) //If the robots.txt file is unreachable, nothing is allowed.
             rules.setCrawlDelay(defaultCrawlDelay)
             val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(unreachableRulesLifetime))
             persisting(hostInfo, HostPersistence.Insert(hostInfo))

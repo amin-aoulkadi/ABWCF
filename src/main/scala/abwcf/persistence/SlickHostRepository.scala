@@ -2,6 +2,7 @@ package abwcf.persistence
 
 import abwcf.data.HostInformation
 import crawlercommons.robots.SimpleRobotRules
+import crawlercommons.robots.SimpleRobotRules.RobotRulesMode
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.connectors.slick.scaladsl.{Slick, SlickSession}
 import org.apache.pekko.stream.scaladsl.Sink
@@ -19,11 +20,12 @@ class SlickHostRepository(using session: SlickSession, materializer: Materialize
    */
   private given getHostInformationResult: GetResult[HostInformation] = GetResult(result => {
     val schemeAndAuthority = result.nextString()
+    val ruleMode = RobotRulesMode.valueOf(result.nextString())
     val rules = result.nextString()
     val crawlDelay = result.nextLong()
     val validUntil = result.nextTimestamp().toInstant
 
-    val robotRules = new SimpleRobotRules()
+    val robotRules = new SimpleRobotRules(ruleMode)
     robotRules.setCrawlDelay(crawlDelay)
 
     if (rules.nonEmpty) {
@@ -47,23 +49,32 @@ class SlickHostRepository(using session: SlickSession, materializer: Materialize
       .collect(Collectors.joining("\n"))
   }
 
+  private def ruleModeToString(rules: SimpleRobotRules): String = rules match {
+    //The RobotRulesMode field is not directly accessible, but its value can be inferred:
+    case rules if rules.isAllowAll => RobotRulesMode.ALLOW_ALL.toString
+    case rules if rules.isAllowNone => RobotRulesMode.ALLOW_NONE.toString
+    case _ => RobotRulesMode.ALLOW_SOME.toString
+  }
+
   override def insert(hostInfo: HostInformation): Future[Int] = {
     val schemeAndAuthority = hostInfo.schemeAndAuthority
+    val ruleMode = ruleModeToString(hostInfo.robotRules)
     val robotRules = rulesToString(hostInfo.robotRules)
     val crawlDelay = hostInfo.robotRules.getCrawlDelay
     val validUntil = Timestamp.from(hostInfo.validUntil)
 
-    val query = sqlu"""INSERT INTO hosts VALUES ($schemeAndAuthority, $robotRules, $crawlDelay, $validUntil)"""
+    val query = sqlu"""INSERT INTO hosts VALUES ($schemeAndAuthority, $ruleMode, $robotRules, $crawlDelay, $validUntil)"""
     session.db.run(query)
   }
 
   override def update(hostInfo: HostInformation): Future[Int] = {
     val schemeAndAuthority = hostInfo.schemeAndAuthority
+    val ruleMode = ruleModeToString(hostInfo.robotRules)
     val robotRules = rulesToString(hostInfo.robotRules)
     val crawlDelay = hostInfo.robotRules.getCrawlDelay
     val validUntil = Timestamp.from(hostInfo.validUntil)
 
-    val query = sqlu"""UPDATE hosts SET robot_rules = $robotRules, crawl_delay = $crawlDelay, valid_until = $validUntil WHERE scheme_and_authority = $schemeAndAuthority"""
+    val query = sqlu"""UPDATE hosts SET rule_mode = $ruleMode, robot_rules = $robotRules, crawl_delay = $crawlDelay, valid_until = $validUntil WHERE scheme_and_authority = $schemeAndAuthority"""
     session.db.run(query)
   }
 
