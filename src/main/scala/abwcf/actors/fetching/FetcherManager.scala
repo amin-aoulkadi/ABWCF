@@ -1,8 +1,9 @@
 package abwcf.actors.fetching
 
 import abwcf.actors.*
+import org.apache.pekko.Done
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
-import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
+import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy, Terminated}
 
 import scala.collection.mutable
 import scala.jdk.DurationConverters.*
@@ -16,6 +17,7 @@ import scala.jdk.DurationConverters.*
  */
 object FetcherManager {
   sealed trait Command
+  case class Shutdown(replyTo: ActorRef[Done]) extends Command
   private case object ScaleFetchers extends Command
 
   private type CombinedCommand = Command | ManagementDataAggregator.Reply
@@ -82,7 +84,37 @@ private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimi
 
       context.log.info("Current number of Fetchers: {} (with up to {} B/s bandwidth each)", fetchers.length, bytesPerSecPerFetcher)
       Behaviors.same
+
+    case Shutdown(replyTo) =>
+      shuttingDown(replyTo)
   })
+
+  private def shuttingDown(replyTo: ActorRef[Done]): Behavior[CombinedCommand] = {
+    context.log.info("Shutting down Fetchers")
+    var activeFetchers = fetchers.length
+
+    if (activeFetchers > 0) {
+      fetchers.foreach(context.watch)
+      scaleFetchers(0)
+
+      //Ignore incoming messages and wait until all Fetchers have stopped:
+      Behaviors.receiveMessage[CombinedCommand](_ => Behaviors.same)
+        .receiveSignal({
+          case (_, Terminated(_)) =>
+            activeFetchers -= 1
+
+            if (activeFetchers == 0) {
+              replyTo ! Done
+              Behaviors.stopped
+            } else {
+              Behaviors.same
+            }
+        })
+    } else {
+      replyTo ! Done
+      Behaviors.stopped
+    }
+  }
 
   /**
    * Spawns or stops [[Fetcher]] actors to reach a target number of [[Fetcher]] actors.

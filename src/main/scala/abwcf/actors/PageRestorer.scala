@@ -2,6 +2,7 @@ package abwcf.actors
 
 import abwcf.actors.persistence.page.PagePersistence
 import abwcf.data.PageStatus
+import org.apache.pekko.Done
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
@@ -17,6 +18,7 @@ import scala.jdk.DurationConverters.*
  */
 object PageRestorer {
   sealed trait Command
+  case class Shutdown(replyTo: ActorRef[Done]) extends Command
   private case object RestorePages extends Command
 
   private type CombinedCommand = Command | PagePersistence.ResultSeq
@@ -43,6 +45,10 @@ object PageRestorer {
             pageManager ! PageManager.RecoveryResult(Some(page))
           })
           Behaviors.same
+
+        case Shutdown(replyTo) =>
+          replyTo ! Done
+          Behaviors.stopped
       })
     })
   }).narrow

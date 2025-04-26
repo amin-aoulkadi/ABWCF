@@ -54,7 +54,7 @@ private class UrlSupplier private(fetcher: ActorRef[Fetcher.Command],
     context.ask(hostQueueRouter, HostQueue.GetHead.apply)({
       case Success(reply) => reply
       case Failure(_) => AskFailure
-    })(askTimeout)
+    })(using askTimeout)
   }
 
   /**

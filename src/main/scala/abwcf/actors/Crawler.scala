@@ -6,11 +6,17 @@ import abwcf.actors.persistence.page.PagePersistenceManager
 import abwcf.data.PageCandidate
 import abwcf.persistence.{CoordinatedSlickSession, SlickHostRepository, SlickPageRepository}
 import abwcf.util.CrawlerSettings
+import org.apache.pekko.Done
+import org.apache.pekko.actor.CoordinatedShutdown
+import org.apache.pekko.actor.typed.scaladsl.AskPattern.*
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{Behavior, SupervisorStrategy}
 import org.apache.pekko.stream.Materializer
+import org.apache.pekko.util.Timeout
 
 import java.net.URISyntaxException
+import scala.concurrent.duration.DurationInt
+import scala.language.postfixOps
 
 /**
  * The user guardian actor for the ABWCF.
@@ -22,9 +28,11 @@ object Crawler {
   case class SeedUrls(urls: Seq[String]) extends Command
 
   def apply(settings: CrawlerSettings = CrawlerSettings()): Behavior[Command] = Behaviors.setup(context => {
+    val system = context.system
+
     //Initialize database resources:
-    val session = CoordinatedSlickSession.create(context.system)
-    val materializer = Materializer.matFromSystem(context.system)
+    val session = CoordinatedSlickSession.create(system)
+    val materializer = Materializer.matFromSystem(system)
     val hostRepository = new SlickHostRepository(using session, materializer)
     val pageRepository = new SlickPageRepository(using session, materializer)
 
@@ -40,8 +48,8 @@ object Crawler {
       "page-persistence-manager"
     )
 
-    HostManager.initializeSharding(context.system, hostPersistenceManager)
-    HostQueue.initializeSharding(context.system)
+    HostManager.initializeSharding(system, hostPersistenceManager)
+    HostQueue.initializeSharding(system)
 
     val prioritizer = context.spawn(
       Behaviors.supervise(Prioritizer(settings))
@@ -49,7 +57,7 @@ object Crawler {
       "prioritizer"
     )
 
-    PageManager.initializeSharding(context.system, pagePersistenceManager, prioritizer)
+    PageManager.initializeSharding(system, pagePersistenceManager, prioritizer)
 
     val pageRestorer = context.spawn(
       Behaviors.supervise(PageRestorer(pagePersistenceManager))
@@ -104,6 +112,15 @@ object Crawler {
         .onFailure(SupervisorStrategy.restart),
       "fetcher-manager"
     )
+
+    //Add coordinated shutdown tasks:
+    CoordinatedShutdown(system).addTask(CoordinatedShutdown.PhaseBeforeServiceUnbind, "shutdown-data-sources")(() => {
+      //Stop the Fetchers and the PageRestorer so that they stop introducing new data into the system:
+      val timeout = Timeout(15 seconds)
+      val fetcherManagerFuture = fetcherManager.ask(FetcherManager.Shutdown.apply)(using timeout, system.scheduler)
+      val pageRestorerFuture = pageRestorer.ask(PageRestorer.Shutdown.apply)(using timeout, system.scheduler)
+      fetcherManagerFuture.zipWith(pageRestorerFuture)((_, _) => Done)(using system.executionContext)
+    })
 
     Behaviors.receiveMessage({
       case SeedUrls(urls) =>
