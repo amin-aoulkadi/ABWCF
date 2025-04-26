@@ -109,7 +109,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
       //Discard the response entity and notify the UserCodeRunner:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
-      userCodeRunner ! UserCodeRunner.ProcessError(page, response.status)
+      userCodeRunner ! UserCodeRunner.Error(page, response.status)
 
       buffer.unstashAll(requestNextUrl())
 
@@ -120,7 +120,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       //Discard the response entity, notify the UserCodeRunner and send the redirect URL to the UrlNormalizer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = HttpUtils.getRedirectUrl(response, page.url)
-      userCodeRunner ! UserCodeRunner.ProcessRedirect(page, response.status, redirectTo)
+      userCodeRunner ! UserCodeRunner.Redirect(page, response.status, redirectTo)
       redirectTo.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, page.crawlDepth))) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler. This also takes care of (shallow) redirect loops. Note that redirection does not increase the crawl depth.
 
       buffer.unstashAll(requestNextUrl())
@@ -133,7 +133,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
       //Consume the response entity to receive the response body:
       val byteFuture = response.entity //Response entities must be consumed or discarded.
-        .withSizeLimit(maxContentLength) //TODO: Catch the EntityStreamSizeException and send a notification downstream.
+        .withSizeLimit(maxContentLength) //Throws an EntityStreamSizeException if the response body is too long.
         .dataBytes
         .throttle(bytesPerSec, 1 second, bytes => bytes.length) //Throttles the stream and the download. The effect on network usage probably also depends on other factors (e.g. drivers) and is more noticeable during long downloads (e.g. 10 MB at 100 kB/s).
         .runReduce(_ ++ _)(using materializer)
@@ -153,7 +153,12 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
         crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(page, responseBody)
       }
 
-      userCodeRunner ! UserCodeRunner.ProcessSuccess(page, new FetchResponse(response, responseBody))
+      userCodeRunner ! UserCodeRunner.Success(page, new FetchResponse(response, responseBody))
+      buffer.unstashAll(requestNextUrl())
+
+		//Notify the UserCodeRunner if the response body exceeds the maximum accepted content length:
+    case FutureFailure(_: EntityStreamSizeException) =>
+      userCodeRunner ! UserCodeRunner.LengthLimitExceeded(page, new FetchResponse(response, ByteString.empty))
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>

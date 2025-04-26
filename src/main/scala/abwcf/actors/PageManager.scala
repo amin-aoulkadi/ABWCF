@@ -27,9 +27,7 @@ object PageManager {
   sealed trait Command
   case class Discover(crawlDepth: Int) extends Command
   case class SetPriority(priority: Long) extends Command
-  case object Success extends Command
-  case object Redirect extends Command
-  case object Error extends Command
+  case object SetStatusProcessed extends Command
   private case object Passivate extends Command
 
   sealed trait PersistenceCommand extends Command //These have to be part of the public protocol so that they work with ShardingEnvelopes.
@@ -142,7 +140,7 @@ private class PageManager private(pagePersistenceManager: ActorRef[PagePersisten
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
 
     Behaviors.receiveMessage({
-      case Success | Redirect | Error =>
+      case SetStatusProcessed =>
         pagePersistenceManager ! PagePersistence.UpdateStatus(page.url, PageStatus.Processed)
         updating(page.copy(status = PageStatus.Processed))
 

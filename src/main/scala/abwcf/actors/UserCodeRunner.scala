@@ -16,30 +16,41 @@ import org.apache.pekko.http.scaladsl.model.StatusCode
  */
 object UserCodeRunner {
   sealed trait Command
-  case class ProcessSuccess(page: Page, response: FetchResponse) extends Command
-  case class ProcessRedirect(page: Page, statusCode: StatusCode, redirectTo: Option[String]) extends Command
-  case class ProcessError(page: Page, statusCode: StatusCode) extends Command
+  case class Success(page: Page, response: FetchResponse) extends Command
+  case class Redirect(page: Page, statusCode: StatusCode, redirectTo: Option[String]) extends Command
+  case class Error(page: Page, statusCode: StatusCode) extends Command
+  case class LengthLimitExceeded(page: Page, response: FetchResponse) extends Command
 
   def apply(settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
     val sharding = ClusterSharding(context.system)
 
+    /**
+     * Notifies the corresponding [[PageManager]] that the page has been processed.
+     */
+    def notifyPageManager(page: Page): Unit = {
+      val pageManager = sharding.entityRefFor(PageManager.TypeKey, page.url)
+      pageManager ! PageManager.SetStatusProcessed
+    }
+
     Behaviors.receiveMessage({
-      case ProcessSuccess(page, response) =>
+      case Success(page, response) =>
         settings.userCode.onFetchSuccess(page, response, context)
-        val pageManager = sharding.entityRefFor(PageManager.TypeKey, page.url)
-        pageManager ! PageManager.Success //Tell the PageManager that the page has been processed.
+        notifyPageManager(page)
         Behaviors.same
 
-      case ProcessRedirect(page, statusCode, redirectTo) =>
+      case Redirect(page, statusCode, redirectTo) =>
         settings.userCode.onFetchRedirect(page, statusCode, redirectTo, context)
-        val pageManager = sharding.entityRefFor(PageManager.TypeKey, page.url)
-        pageManager ! PageManager.Redirect //Tell the PageManager that the page has been processed.
+        notifyPageManager(page)
         Behaviors.same
 
-      case ProcessError(page, statusCode) => //TODO: Maybe let the user code decide whether to try again later or not.
+      case Error(page, statusCode) => //TODO: Maybe let the user code decide whether to try again later or not.
         settings.userCode.onFetchError(page, statusCode, context)
-        val pageManager = sharding.entityRefFor(PageManager.TypeKey, page.url)
-        pageManager ! PageManager.Error //Tell the PageManager that the page has been processed.
+        notifyPageManager(page)
+        Behaviors.same
+
+      case LengthLimitExceeded(page, response) =>
+        settings.userCode.onLengthLimitExceeded(page, response, context)
+        notifyPageManager(page)
         Behaviors.same
     })
   })

@@ -48,4 +48,13 @@ trait UserCode {
    * The default implementation does nothing.
    */
   def onFetchError(page: Page, statusCode: StatusCode, context: ActorContext[?]): Unit = ()
+
+  /**
+   * Executed when the crawler aborts fetching a page because the response body exceeds the maximum accepted content length.
+   *
+   * This method is used by the [[abwcf.actors.UserCodeRunner]] actor.
+   *
+   * The default implementation does nothing.
+   */
+  def onLengthLimitExceeded(page: Page, response: FetchResponse, context: ActorContext[?]): Unit = ()
 }
