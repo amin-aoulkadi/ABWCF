@@ -29,10 +29,10 @@ object Crawler {
 
   def apply(settings: CrawlerSettings = CrawlerSettings()): Behavior[Command] = Behaviors.setup(context => {
     val system = context.system
+    val materializer = Materializer.matFromSystem(system)
 
     //Initialize database resources:
     val session = CoordinatedSlickSession.create(system)
-    val materializer = Materializer.matFromSystem(system)
     val hostRepository = new SlickHostRepository(using session, materializer)
     val pageRepository = new SlickPageRepository(using session, materializer)
 
@@ -48,8 +48,11 @@ object Crawler {
       "page-persistence-manager"
     )
 
-    HostManager.initializeSharding(system, hostPersistenceManager)
-    HostQueue.initializeSharding(system)
+    val robotsFetcherManager = context.spawn(
+      Behaviors.supervise(RobotsFetcherManager())
+        .onFailure(SupervisorStrategy.resume),
+      "robots-fetcher-manager"
+    )
 
     val prioritizer = context.spawn(
       Behaviors.supervise(Prioritizer(settings))
@@ -57,6 +60,9 @@ object Crawler {
       "prioritizer"
     )
 
+    //Initialize shard regions:
+    HostManager.initializeSharding(system, hostPersistenceManager, robotsFetcherManager)
+    HostQueue.initializeSharding(system)
     PageManager.initializeSharding(system, pagePersistenceManager, prioritizer)
 
     val pageRestorer = context.spawn(

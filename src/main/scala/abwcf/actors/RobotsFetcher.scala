@@ -1,9 +1,10 @@
 package abwcf.actors
 
 import abwcf.util.HttpUtils
+import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpRequest, HttpResponse, Uri}
 import org.apache.pekko.http.scaladsl.{Http, HttpExt}
 import org.apache.pekko.stream.Materializer
@@ -15,9 +16,9 @@ import scala.language.postfixOps
 import scala.util.{Failure, Success}
 
 /**
- * Fetches the `robots.txt` file for a [[HostManager]].
+ * Fetches a single `robots.txt` file and sends the result to the corresponding [[HostManager]].
  *
- * There should be one [[RobotsFetcher]] actor per [[HostManager]] actor.
+ * [[RobotsFetcher]] actors should be managed by a [[RobotsFetcherManager]] actor.
  *
  * This actor is stateful.
  *
@@ -30,30 +31,26 @@ object RobotsFetcher {
   private case class FutureSuccess(value: HttpResponse | ByteString) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
-  sealed trait Reply
-  case class Response(responseBody: ByteString) extends Reply
-  case object Unavailable extends Reply
-  case object Unreachable extends Reply
-
-  def apply(schemeAndAuthority: String, replyTo: ActorRef[Reply]): Behavior[Command] = Behaviors.setup(context => { //The RobotsFetcher is spawned by the HostManager, so using an ActorRef (instead of a ShardingEnvelope) for the reply is not an issue.
+  def apply(schemeAndAuthority: String): Behavior[Command] = Behaviors.setup(context => {
     val http = Http(context.system.toClassic)
     val materializer = Materializer(context)
+    val hostManager = ClusterSharding(context.system).entityRefFor(HostManager.TypeKey, schemeAndAuthority)
 
-    new RobotsFetcher(schemeAndAuthority, replyTo, http, materializer, context).sendRequest(schemeAndAuthority + "/robots.txt", 0)
+    new RobotsFetcher(schemeAndAuthority, hostManager, http, materializer, context).sendRequest(schemeAndAuthority + "/robots.txt", 0)
   })
 }
 
 private class RobotsFetcher private (schemeAndAuthority: String,
-                                     replyTo: ActorRef[RobotsFetcher.Reply],
+                                     hostManager: EntityRef[HostManager.Command],
                                      http: HttpExt,
                                      materializer: Materializer,
                                      context: ActorContext[RobotsFetcher.Command]) {
   import RobotsFetcher.*
 
   private val config = context.system.settings.config
-  private val maxContentLength = config.getBytes("abwcf.actors.robots-fetcher.max-content-length")
-  private val bytesPerSec = config.getBytes("abwcf.actors.robots-fetcher.bandwidth-budget-per-file").toInt
-  private val maxRedirects = config.getInt("abwcf.actors.robots-fetcher.max-redirects")
+  private val maxContentLength = config.getBytes("abwcf.robots.fetching.max-content-length")
+  private val bytesPerSec = config.getBytes("abwcf.robots.fetching.bandwidth-budget-per-file").toInt
+  private val maxRedirects = config.getInt("abwcf.robots.fetching.max-redirects")
 
   private def sendRequest(url: String, redirectCounter: Int): Behavior[Command] = {
     context.log.info("Fetching {}", url)
@@ -77,7 +74,7 @@ private class RobotsFetcher private (schemeAndAuthority: String,
       //Consume the response entity to receive the response body:
       val byteFuture = response.entity //Response entities must be consumed or discarded.
         .dataBytes
-        .throttle(bytesPerSec, 1 second, bytes => bytes.length) //TODO: Total bandwidth budget for all RobotsFetchers?
+        .throttle(bytesPerSec, 1 second, bytes => bytes.length)
         .flatMapConcat(Source(_))
         .take(maxContentLength)
         .fold(ByteString.newBuilder)((builder, byte) => builder.addOne(byte)) //Rebuild the ByteString.
@@ -102,7 +99,7 @@ private class RobotsFetcher private (schemeAndAuthority: String,
           sendRequest(redirectUrl, redirectCounter + 1)
 
         case _ =>
-          replyTo ! Unavailable
+          hostManager ! HostManager.Unavailable
           Behaviors.stopped
       }
 
@@ -110,25 +107,25 @@ private class RobotsFetcher private (schemeAndAuthority: String,
     case FutureSuccess(response: HttpResponse) if 400 to 499 contains response.status.intValue =>
       context.log.info("Received {} for {}", response.status.toString, url)
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
-      replyTo ! Unavailable
+      hostManager ! HostManager.Unavailable
       Behaviors.stopped
 
     //Handle other HTTP responses:
     case FutureSuccess(response: HttpResponse) =>
       context.log.info("Received {} for {}", response.status.toString, url)
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
-      replyTo ! Unreachable
+      hostManager ! HostManager.Unreachable
       Behaviors.stopped
 
     //Send the complete response to the HostManager after the response body has been received:
     case FutureSuccess(responseBody: ByteString) =>
       context.log.info("Received {} bytes for {}", responseBody.length, url)
-      replyTo ! Response(responseBody)
+      hostManager ! HostManager.Response(responseBody)
       Behaviors.stopped
 
     case FutureFailure(throwable) =>
       context.log.error("Exception while fetching {}", url, throwable)
-      replyTo ! Unreachable
+      hostManager ! HostManager.Unreachable
       Behaviors.stopped
   })
 }

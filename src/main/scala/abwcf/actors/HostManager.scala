@@ -8,6 +8,7 @@ import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuff
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityContext, EntityTypeKey}
 import org.apache.pekko.cluster.sharding.typed.{ClusterShardingSettings, ShardingEnvelope}
+import org.apache.pekko.util.ByteString
 
 import java.time.Instant
 import java.util.Locale
@@ -37,33 +38,42 @@ object HostManager {
   case object InsertSuccess extends PersistenceCommand
   case object UpdateSuccess extends PersistenceCommand
 
+  sealed trait FetchResult extends Command //These have to be part of the public protocol so that they work with ShardingEnvelopes.
+  case class Response(responseBody: ByteString) extends FetchResult
+  case object Unavailable extends FetchResult
+  case object Unreachable extends FetchResult
+
   sealed trait Reply
-  case class HostInfo(hostInfo: HostInformation) extends Reply
+  case class HostInfo(hostInfo: HostInformation) extends FetchResult
 
-  private type CombinedCommand = Command | RobotsFetcher.Reply
+  def apply(entityContext: EntityContext[Command],
+            hostPersistenceManager: ActorRef[HostPersistence.Command],
+            robotsFetcherManager: ActorRef[RobotsFetcherManager.Command]): Behavior[Command] =
+    Behaviors.setup(context => {
+      Behaviors.withStash(100)(buffer => { //TODO: The stash can fill up with GetHostInfo messages.
+        new HostManager(hostPersistenceManager, robotsFetcherManager, entityContext.shard, context, buffer).recovering(entityContext.entityId)
+      })
+  })
 
-  def apply(entityContext: EntityContext[Command], hostPersistenceManager: ActorRef[HostPersistence.Command]): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
-    Behaviors.withStash(100)(buffer => { //TODO: The stash can fill up with GetHostInfo messages.
-      new HostManager(hostPersistenceManager, entityContext.shard, context, buffer).recovering(entityContext.entityId)
-    })
-  }).narrow
-
-  def initializeSharding(system: ActorSystem[?], hostPersistenceManager: ActorRef[HostPersistence.Command]): ActorRef[ShardingEnvelope[Command]] = {
+  def initializeSharding(system: ActorSystem[?],
+                         hostPersistenceManager: ActorRef[HostPersistence.Command],
+                         robotsFetcherManager: ActorRef[RobotsFetcherManager.Command]): ActorRef[ShardingEnvelope[Command]] = {
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //There is no need to remember HostManagers.
       .withNoPassivationStrategy() //Disable automatic passivation.
 
     ClusterSharding(system).init(
-      Entity(TypeKey)(entityContext => HostManager(entityContext, hostPersistenceManager))
+      Entity(TypeKey)(entityContext => HostManager(entityContext, hostPersistenceManager, robotsFetcherManager))
         .withSettings(settings)
     )
   }
 }
 
 private class HostManager private (hostPersistenceManager: ActorRef[HostPersistence.Command],
+                                   robotsFetcherManager: ActorRef[RobotsFetcherManager.Command],
                                    shard: ActorRef[ClusterSharding.ShardCommand],
-                                   context: ActorContext[HostManager.CombinedCommand],
-                                   buffer: StashBuffer[HostManager.CombinedCommand]) {
+                                   context: ActorContext[HostManager.Command],
+                                   buffer: StashBuffer[HostManager.Command]) {
   import HostManager.*
 
   private val config = context.system.settings.config
@@ -78,7 +88,7 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
   private val unreachableRulesLifetime = config.getDuration("abwcf.robots.unreachable-rules-lifetime")
   private val receiveTimeout = config.getDuration("abwcf.actors.host-manager.passivation-receive-timeout").toScala
 
-  private def recovering(schemeAndAuthority: String): Behavior[CombinedCommand] = {
+  private def recovering(schemeAndAuthority: String): Behavior[Command] = {
     hostPersistenceManager ! HostPersistence.Recover(schemeAndAuthority)
 
     Behaviors.receiveMessage({
@@ -97,8 +107,8 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
     })
   }
 
-  private def fetching(schemeAndAuthority: String, expiredHostInfo: Option[HostInformation]): Behavior[CombinedCommand] = {
-    val robotsFetcher = context.spawnAnonymous(RobotsFetcher(schemeAndAuthority, context.self))
+  private def fetching(schemeAndAuthority: String, expiredHostInfo: Option[HostInformation]): Behavior[Command] = {
+    robotsFetcherManager ! RobotsFetcherManager.Fetch(schemeAndAuthority)
     val parser = new SimpleRobotRulesParser(Long.MaxValue, 3) //Disable the built-in maximum crawl delay logic of the SimpleRobotRulesParser.
 
     def nextBehavior(hostInfo: HostInformation) = expiredHostInfo match {
@@ -107,7 +117,7 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
     }
 
     Behaviors.receiveMessage({
-      case RobotsFetcher.Response(responseBody) =>
+      case Response(responseBody) =>
         //Parse the robots.txt file:
         val rules = parser.parseContent(schemeAndAuthority, responseBody.toArray, "text/plain", userAgents) //The RobotsFetcher only fetches "text/plain".
         rules.sortRules()
@@ -129,14 +139,14 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
         val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(validRulesLifetime))
         nextBehavior(hostInfo)
 
-      case RobotsFetcher.Unavailable =>
+      case Unavailable =>
         context.log.info("The robots.txt for {} is unavailable, all resources on this host can be crawled", schemeAndAuthority)
         val rules = new SimpleRobotRules(RobotRulesMode.ALLOW_ALL) //If the robots.txt file is unavailable, everything is allowed.
         rules.setCrawlDelay(defaultCrawlDelay)
         val hostInfo = HostInformation(schemeAndAuthority, rules, Instant.now.plus(unavailableRulesLifetime))
         nextBehavior(hostInfo)
 
-      case RobotsFetcher.Unreachable =>
+      case Unreachable =>
         expiredHostInfo match {
           case Some(oldHostInfo) =>
             context.log.info("The robots.txt for {} is unreachable, expired rules for this host will be reused", schemeAndAuthority)
@@ -157,7 +167,7 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
     })
   }
 
-  private def persisting(hostInfo: HostInformation, persistenceCommand: HostPersistence.Insert | HostPersistence.Update): Behavior[CombinedCommand] = {
+  private def persisting(hostInfo: HostInformation, persistenceCommand: HostPersistence.Insert | HostPersistence.Update): Behavior[Command] = {
     hostPersistenceManager ! persistenceCommand
 
     Behaviors.receiveMessage({
@@ -170,7 +180,7 @@ private class HostManager private (hostPersistenceManager: ActorRef[HostPersiste
     })
   }
 
-  private def knownHost(hostInfo: HostInformation): Behavior[CombinedCommand] = {
+  private def knownHost(hostInfo: HostInformation): Behavior[Command] = {
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
 
     Behaviors.receiveMessage({
