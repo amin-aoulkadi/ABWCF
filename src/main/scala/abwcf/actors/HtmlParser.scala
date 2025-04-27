@@ -5,9 +5,9 @@ import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.ByteString
 import org.jsoup.Jsoup
+import org.jsoup.nodes.Document
 
-import java.util.Locale
-import scala.jdk.StreamConverters.StreamHasToScala
+import scala.jdk.StreamConverters.*
 
 /**
  * Retrieves HTTP URLs from HTML documents.
@@ -22,20 +22,44 @@ object HtmlParser {
 
   def apply(urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] = Behaviors.receiveMessage({
     case Parse(page, responseBody) =>
-      //Parse the HTML document and get URLs:
-      val urls: List[String] = Jsoup.parse(responseBody.utf8String, page.url)
-        .select("a[href]") //Select all <a> elements that have an href attribute.
-        .stream()
-        .map(_.absUrl("href"))
-        .distinct()
-        .filter(_.substring(0, 4).toLowerCase(Locale.ROOT).equals("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
-        .toScala(List)
+      //Parse the HTML document:
+      val document = Jsoup.parse(responseBody.utf8String, page.url)
 
-      //Send the URLs to the UrlNormalizer:
-      urls.map(PageCandidate(_, page.crawlDepth + 1)) //Important: The crawl depth increases here.
-        .foreach(urlNormalizer ! UrlNormalizer.Normalize(_))
+      if (canFollowLinks(document)) {
+        //Get URLs from the document:
+        val urls: List[String] = document
+          .select("a[href]") //Select all <a> elements that have an href attribute.
+          .stream()
+          .map(_.absUrl("href"))
+          .distinct()
+          .filter(_.substring(0, 4).equalsIgnoreCase("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
+          .toScala(List)
+
+        //Send the URLs to the UrlNormalizer:
+        urls.map(PageCandidate(_, page.crawlDepth + 1)) //Important: The crawl depth increases here.
+          .foreach(urlNormalizer ! UrlNormalizer.Normalize(_))
+      }
 
       //TODO: Maybe debounce discovered URLs to eliminate duplicates across multiple responses (e.g. via a custom mailbox for the downstream actor)?
       Behaviors.same
   })
+
+  /**
+   * Checks if the document contains any `<meta name="robots" content="...">` elements that indicate that crawlers should not follow the links in the document.
+   *
+   * @return `true` if the links in the document can be followed, otherwise `false`
+   *
+   * @note There is no official standard or specification for `<meta name="robots" content="...">` elements, so each vendor supports a different set of rules.
+   * @see
+   *      - [[https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name MDN: Standard metadata names]]
+   *      - [[https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag Google: Robots Meta Tags Specifications]]
+   */
+  private def canFollowLinks(document: Document): Boolean = {
+    document.select("meta[name=robots][content]") //Select all <meta name="robots" content="..."> elements.
+      .stream()
+      .map(_.attr("content")) //"noindex, nofollow"
+      .flatMap(_.split(',').asJavaSeqStream) //"noindex", " nofollow"
+      .map(_.trim) //"noindex", "nofollow"
+      .noneMatch(_.equalsIgnoreCase("nofollow"))
+  }
 }
