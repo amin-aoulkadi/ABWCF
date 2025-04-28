@@ -101,6 +101,12 @@ object Crawler {
       "html-parser"
     )
 
+    val robotsHeaderFilter = context.spawn(
+      Behaviors.supervise(RobotsHeaderFilter(htmlParser))
+        .onFailure(SupervisorStrategy.resume), //The RobotsHeaderFilter is stateless, so resuming it is safe.
+      "robots-header-filter"
+    )
+
     val hostQueueRouter = context.spawn(
       Behaviors.supervise(HostQueueRouter())
         .onFailure(SupervisorStrategy.resume), //The HostQueueRouter is stateless, so resuming it should be safe.
@@ -108,7 +114,7 @@ object Crawler {
     )
 
     val crawlDepthLimiter = context.spawn(
-      Behaviors.supervise(CrawlDepthLimiter(htmlParser))
+      Behaviors.supervise(CrawlDepthLimiter(robotsHeaderFilter))
         .onFailure(SupervisorStrategy.resume), //The CrawlDepthLimiter is stateless, so resuming it is safe.
       "crawl-depth-limiter"
     )

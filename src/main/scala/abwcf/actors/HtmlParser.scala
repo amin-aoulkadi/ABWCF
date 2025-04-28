@@ -40,12 +40,11 @@ object HtmlParser {
           .foreach(urlNormalizer ! UrlNormalizer.Normalize(_))
       }
 
-      //TODO: Maybe debounce discovered URLs to eliminate duplicates across multiple responses (e.g. via a custom mailbox for the downstream actor)?
       Behaviors.same
   })
 
   /**
-   * Checks if the document contains any `<meta name="robots" content="...">` elements that indicate that crawlers should not follow the links in the document.
+   * Checks if the document contains any `<meta name="robots" content="...">` elements that indicate that robots should not follow the links in the document.
    *
    * @return `true` if the links in the document can be followed, otherwise `false`
    *

@@ -1,9 +1,8 @@
 package abwcf.actors
 
-import abwcf.data.Page
+import abwcf.data.{FetchResponse, Page}
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
-import org.apache.pekko.util.ByteString
 
 /**
  * Limits the crawl depth as configured.
@@ -14,16 +13,16 @@ import org.apache.pekko.util.ByteString
  */
 object CrawlDepthLimiter {
   sealed trait Command
-  case class CheckDepth(page: Page, responseBody: ByteString) extends Command
+  case class CheckDepth(page: Page, response: FetchResponse) extends Command
 
-  def apply(htmlParser: ActorRef[HtmlParser.Command]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(robotsHeaderFilter: ActorRef[RobotsHeaderFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
     val maxCrawlDepth = config.getInt("abwcf.actors.crawl-depth-limiter.max-crawl-depth")
 
     Behaviors.receiveMessage({
-      case CheckDepth(page, responseBody) =>
+      case CheckDepth(page, response) =>
         if (page.crawlDepth < maxCrawlDepth) {
-          htmlParser ! HtmlParser.Parse(page, responseBody)
+          robotsHeaderFilter ! RobotsHeaderFilter.Filter(page, response)
         }
 
         Behaviors.same

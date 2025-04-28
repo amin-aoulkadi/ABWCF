@@ -24,7 +24,7 @@ import scala.util.{Failure, Success}
  */
 object Fetcher {
   /**
-   * Media types that can be parsed by the [[HtmlParser]] actor.
+   * Media types that may contain links that can be parsed by the [[HtmlParser]] actor.
    */
   private val ParseableMediaTypes = List(MediaTypes.`text/html`, MediaTypes.`application/xhtml+xml`)
 
@@ -148,12 +148,13 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     //Send the complete response downstream after the response body has been received:
     case FutureSuccess(responseBody: ByteString) =>
       context.log.info("Received {} bytes ({}) for {}", responseBody.length, response.entity.contentType, page.url)
+      val fetchResponse = new FetchResponse(response, responseBody)
 
       if (ParseableMediaTypes.contains(response.entity.contentType.mediaType)) { //Possible alternative: Use mediaType.binary or mediaType.isText.
-        crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(page, responseBody)
+        crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(page, fetchResponse)
       }
 
-      userCodeRunner ! UserCodeRunner.Success(page, new FetchResponse(response, responseBody))
+      userCodeRunner ! UserCodeRunner.Success(page, fetchResponse)
       buffer.unstashAll(requestNextUrl())
 
 		//Notify the UserCodeRunner if the response body exceeds the maximum accepted content length:
