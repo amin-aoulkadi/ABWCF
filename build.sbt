@@ -12,6 +12,7 @@ val pekkoSlickVersion = "1.1.0" //License: Apache-2.0
 val caffeineVersion = "3.2.0" //License: Apache-2.0
 val crawlerCommonsVersion = "1.4" //License: Apache-2.0
 val jsoupVersion = "1.19.1" //License: MIT
+val openTelemetryApiVersion = "1.49.0" //License: Apache-2.0
 val scalaTestVersion = "3.2.19" //License: Apache-2.0
 
 libraryDependencies ++= Seq(
@@ -25,5 +26,6 @@ libraryDependencies ++= Seq(
   "com.github.ben-manes.caffeine" % "caffeine" % caffeineVersion,
   "com.github.crawler-commons" % "crawler-commons" % crawlerCommonsVersion,
   "org.jsoup" % "jsoup" % jsoupVersion,
+  "io.opentelemetry" % "opentelemetry-api" % openTelemetryApiVersion,
   "org.scalatest" %% "scalatest" % scalaTestVersion % Test
 )
