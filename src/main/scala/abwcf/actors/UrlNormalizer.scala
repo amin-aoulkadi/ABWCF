@@ -1,6 +1,8 @@
 package abwcf.actors
 
 import abwcf.data.PageCandidate
+import abwcf.metrics.UrlNormalizerMetrics
+import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 
@@ -24,11 +26,12 @@ object UrlNormalizer {
   sealed trait Command
   case class Normalize(candidate: PageCandidate) extends Command
 
-  def apply(urlFilter: ActorRef[UrlFilter.Command]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(urlFilter: ActorRef[UrlFilter.Command], settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
     val removeUserInfo = config.getBoolean("abwcf.actors.url-normalizer.remove-userinfo")
     val removeQuery = config.getBoolean("abwcf.actors.url-normalizer.remove-query")
     val removeFragment = config.getBoolean("abwcf.actors.url-normalizer.remove-fragment")
+    val metrics = UrlNormalizerMetrics(settings, context)
 
     Behaviors.receiveMessage({
       case Normalize(candidate) =>
@@ -54,9 +57,12 @@ object UrlNormalizer {
 
           urlFilter ! UrlFilter.Filter(candidate.copy(url = builder.toString()))
         } catch {
-          case e: Exception => context.log.error("Exception while normalizing URL {}", candidate.url, e)
+          case e: Exception =>
+            context.log.error("Exception while normalizing URL {}", candidate.url, e)
+            metrics.addExceptions(1, e)
         }
 
+        metrics.addProcessedUrls(1)
         Behaviors.same
     })
   })

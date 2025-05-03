@@ -90,7 +90,7 @@ object Crawler {
     )
 
     val urlNormalizer = context.spawn(
-      Behaviors.supervise(UrlNormalizer(urlFilter))
+      Behaviors.supervise(UrlNormalizer(urlFilter, settings))
         .onFailure[URISyntaxException](SupervisorStrategy.resume), //The UrlNormalizer is stateless, so resuming it is safe.
       "url-normalizer"
     )
