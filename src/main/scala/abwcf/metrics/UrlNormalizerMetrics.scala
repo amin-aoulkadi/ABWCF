@@ -2,7 +2,6 @@ package abwcf.metrics
 
 import abwcf.actors.UrlNormalizer
 import abwcf.util.CrawlerSettings
-import io.opentelemetry.api.common.Attributes
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
 
 object UrlNormalizerMetrics {
@@ -13,11 +12,10 @@ object UrlNormalizerMetrics {
   }
 }
 
-class UrlNormalizerMetrics private (settings: CrawlerSettings, context: ActorContext[?]) {
+class UrlNormalizerMetrics private (settings: CrawlerSettings, context: ActorContext[?]) extends ActorMetrics(context) {
   import UrlNormalizerMetrics.*
 
   private val meter = settings.openTelemetry.getMeter(UrlNormalizer.getClass.getName)
-  private val basicAttributes = Attributes.of(AttributeKeys.ActorPath, context.self.path.toString)
 
   private val processedUrlsCounter = meter.counterBuilder(s"$Prefix.processed_urls")
     .setDescription("The number of URLs that have been processed.")
@@ -28,11 +26,11 @@ class UrlNormalizerMetrics private (settings: CrawlerSettings, context: ActorCon
     .build()
 
   def addProcessedUrls(value: Long): Unit = {
-    processedUrlsCounter.add(value, basicAttributes)
+    processedUrlsCounter.add(value, actorAttributes)
   }
 
   def addExceptions(value: Long, exception: Exception): Unit = {
-    val attributes = basicAttributes.toBuilder
+    val attributes = actorAttributes.toBuilder
       .put(AttributeKeys.Exception, exception.getClass.getName)
       .build()
 
