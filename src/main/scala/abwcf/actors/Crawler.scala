@@ -1,6 +1,7 @@
 package abwcf.actors
 
 import abwcf.actors.fetching.FetcherManager
+import abwcf.actors.metrics.ClusterNodeMetricsCollector
 import abwcf.actors.persistence.host.HostPersistenceManager
 import abwcf.actors.persistence.page.PagePersistenceManager
 import abwcf.data.PageCandidate
@@ -123,6 +124,12 @@ object Crawler {
       Behaviors.supervise(FetcherManager(crawlDepthLimiter, hostQueueRouter, urlNormalizer, userCodeRunner))
         .onFailure(SupervisorStrategy.restart),
       "fetcher-manager"
+    )
+
+    context.spawn(
+      Behaviors.supervise(ClusterNodeMetricsCollector(settings))
+        .onFailure(SupervisorStrategy.restart),
+      "cluster-node-metrics-aggregator"
     )
 
     //Add coordinated shutdown tasks:
