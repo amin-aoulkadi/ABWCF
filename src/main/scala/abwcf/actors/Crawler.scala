@@ -121,7 +121,7 @@ object Crawler {
     )
 
     val fetcherManager = context.spawn(
-      Behaviors.supervise(FetcherManager(crawlDepthLimiter, hostQueueRouter, urlNormalizer, userCodeRunner))
+      Behaviors.supervise(FetcherManager(crawlDepthLimiter, hostQueueRouter, urlNormalizer, userCodeRunner, settings))
         .onFailure(SupervisorStrategy.restart),
       "fetcher-manager"
     )

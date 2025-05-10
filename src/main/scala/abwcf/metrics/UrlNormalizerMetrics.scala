@@ -29,11 +29,11 @@ class UrlNormalizerMetrics private (settings: CrawlerSettings, context: ActorCon
     processedUrlsCounter.add(value, actorAttributes)
   }
 
-  def addExceptions(value: Long, exception: Exception): Unit = {
-    val attributes = actorAttributes.toBuilder
+  def addException(exception: Exception): Unit = {
+    val attributes = actorAttributesBuilder
       .put(AttributeKeys.Exception, exception.getClass.getName)
       .build()
 
-    exceptionsCounter.add(value, attributes)
+    exceptionsCounter.add(1, attributes)
   }
 }

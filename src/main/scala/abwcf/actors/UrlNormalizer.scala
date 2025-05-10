@@ -59,7 +59,7 @@ object UrlNormalizer {
         } catch {
           case e: Exception =>
             context.log.error("Exception while normalizing URL {}", candidate.url, e)
-            metrics.addExceptions(1, e)
+            metrics.addException(e)
         }
 
         metrics.addProcessedUrls(1)

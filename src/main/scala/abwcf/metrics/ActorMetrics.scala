@@ -1,6 +1,6 @@
 package abwcf.metrics
 
-import io.opentelemetry.api.common.Attributes
+import io.opentelemetry.api.common.{Attributes, AttributesBuilder}
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
 
 trait ActorMetrics(context: ActorContext[?]) {
@@ -12,4 +12,11 @@ trait ActorMetrics(context: ActorContext[?]) {
     AttributeKeys.ActorPath, context.self.path.toStringWithoutAddress,
     AttributeKeys.ActorSystemAddress, context.system.address.toString
   )
+
+  /**
+   * An [[AttributesBuilder]] based on [[actorAttributes]].
+   * 
+   * @note Using this field (instead of `actorAttributes.toBuilder`) is just an optimization to avoid creating the same builder multiple times.
+   */
+  protected val actorAttributesBuilder: AttributesBuilder = actorAttributes.toBuilder
 }
