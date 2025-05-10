@@ -1,6 +1,7 @@
 package abwcf.actors
 
 import abwcf.data.PageCandidate
+import abwcf.util.CrawlerSettings
 import com.typesafe.config.ConfigFactory
 import org.apache.pekko.actor.testkit.typed.scaladsl.{BehaviorTestKit, TestInbox}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -18,7 +19,7 @@ class UrlNormalizerSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
     .withFallback(BehaviorTestKit.ApplicationTestConfig)
 
   private val inbox = TestInbox[UrlFilter.Command]()
-  private val testKit = BehaviorTestKit(UrlNormalizer(inbox.ref), "testkit", config)
+  private val testKit = BehaviorTestKit(UrlNormalizer(inbox.ref, CrawlerSettings()), "testkit", config)
 
   def test(input: String, expectedResult: String): Unit = {
     testKit.run(UrlNormalizer.Normalize(PageCandidate(input, 0)))
