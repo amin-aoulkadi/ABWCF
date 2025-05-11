@@ -50,7 +50,7 @@ object Crawler {
     )
 
     val robotsFetcherManager = context.spawn(
-      Behaviors.supervise(RobotsFetcherManager())
+      Behaviors.supervise(RobotsFetcherManager(settings))
         .onFailure(SupervisorStrategy.resume),
       "robots-fetcher-manager"
     )

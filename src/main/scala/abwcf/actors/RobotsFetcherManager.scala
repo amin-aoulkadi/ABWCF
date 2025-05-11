@@ -1,5 +1,7 @@
 package abwcf.actors
 
+import abwcf.metrics.RobotsFetcherManagerMetrics
+import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 
@@ -17,19 +19,22 @@ object RobotsFetcherManager {
   case class Fetch(schemeAndAuthority: String) extends Command
   private case object RobotsFetcherDone extends Command
 
-  def apply(): Behavior[Command] = Behaviors.setup(context => {
-    new RobotsFetcherManager(context).robotsFetcherManager()
+  def apply(settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
+    new RobotsFetcherManager(settings, context).robotsFetcherManager()
   })
 }
 
-private class RobotsFetcherManager private (context: ActorContext[RobotsFetcherManager.Command]) {
+private class RobotsFetcherManager private (settings: CrawlerSettings, context: ActorContext[RobotsFetcherManager.Command]) {
   import RobotsFetcherManager.*
 
   private val config = context.system.settings.config
   private val maxActiveFetchers = config.getInt("abwcf.robots.fetching.max-concurrent-files")
+  private val metrics = RobotsFetcherManagerMetrics(settings, context)
 
   private val queue = mutable.Queue.empty[String] //Mutable state!
   private var activeFetchers = 0 //Mutable state!
+
+  metrics.buildQueueLengthGauge(queue)
 
   private def robotsFetcherManager(): Behavior[Command] = Behaviors.receiveMessage({
     case Fetch(schemeAndAuthority) if activeFetchers < maxActiveFetchers =>
@@ -48,6 +53,7 @@ private class RobotsFetcherManager private (context: ActorContext[RobotsFetcherM
 
     case RobotsFetcherDone =>
       activeFetchers -= 1
+      metrics.setFetchers(activeFetchers)
       Behaviors.same
   })
 
@@ -55,5 +61,6 @@ private class RobotsFetcherManager private (context: ActorContext[RobotsFetcherM
     val robotsFetcher = context.spawnAnonymous(RobotsFetcher(schemeAndAuthority))
     context.watchWith(robotsFetcher, RobotsFetcherDone)
     activeFetchers += 1
+    metrics.setFetchers(activeFetchers)
   }
 }
