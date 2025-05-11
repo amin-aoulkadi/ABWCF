@@ -25,9 +25,8 @@ class UrlNormalizerMetrics private (settings: CrawlerSettings, context: ActorCon
     .setDescription("The number of exceptions thrown while normalizing URLs.")
     .build()
 
-  def addProcessedUrls(value: Long): Unit = {
+  def addProcessedUrls(value: Long): Unit =
     processedUrlsCounter.add(value, actorAttributes)
-  }
 
   def addException(exception: Exception): Unit = {
     val attributes = actorAttributesBuilder

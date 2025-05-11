@@ -1,6 +1,7 @@
 package abwcf.actors.fetching
 
 import abwcf.actors.*
+import abwcf.metrics.FetcherManagerMetrics
 import abwcf.util.CrawlerSettings
 import org.apache.pekko.Done
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
@@ -60,6 +61,7 @@ private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimi
   private val config = context.system.settings.config
   private val totalBytesPerSec = config.getBytes("abwcf.fetching.total-bandwidth-budget")
   private val minBytesPerSecPerFetcher = config.getBytes("abwcf.fetching.min-bandwidth-budget-per-fetcher")
+  private val metrics = FetcherManagerMetrics(settings, context)
 
   private val maxFetchersByBandwidth = (totalBytesPerSec / minBytesPerSecPerFetcher).toInt //Integer division with remainder. Cast because the rest of this code needs an Int.
   private val fetchers = mutable.ListBuffer.empty[ActorRef[Fetcher.Command]] //Mutable state!
@@ -86,6 +88,8 @@ private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimi
       fetchers.foreach(_ ! Fetcher.SetMaxBandwidth(bytesPerSecPerFetcher))
 
       context.log.info("Current number of Fetchers: {} (with up to {} B/s bandwidth each)", fetchers.length, bytesPerSecPerFetcher)
+      metrics.setFetchers(fetchers.length)
+      metrics.setFetcherBandwidth(bytesPerSecPerFetcher)
       Behaviors.same
 
     case Shutdown(replyTo) =>

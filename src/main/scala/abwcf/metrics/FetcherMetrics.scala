@@ -27,6 +27,7 @@ class FetcherMetrics private (settings: CrawlerSettings, context: ActorContext[?
     .build()
 
   private val receivedBytesCounter = meter.counterBuilder(s"$Prefix.received_bytes")
+    .setUnit("By") //Weird UCUM identifier for "byte".
     .setDescription("The number of response body bytes that have been received (excluding discarded response bodies).")
     .build()
 
@@ -34,9 +35,8 @@ class FetcherMetrics private (settings: CrawlerSettings, context: ActorContext[?
     .setDescription("The number of exceptions thrown while fetching pages.")
     .build()
 
-  def addFetchedPages(value: Long): Unit = {
+  def addFetchedPages(value: Long): Unit =
     fetchedPagesCounter.add(value, actorAttributes)
-  }
 
   def addResponse(response: HttpResponse): Unit = {
     val attributes = actorAttributesBuilder
@@ -47,9 +47,8 @@ class FetcherMetrics private (settings: CrawlerSettings, context: ActorContext[?
     responseCounter.add(1, attributes)
   }
 
-  def addReceivedBytes(value: Long): Unit = {
+  def addReceivedBytes(value: Long): Unit =
     receivedBytesCounter.add(value, actorAttributes)
-  }
 
   def addException(exception: Throwable): Unit = {
     val attributes = actorAttributesBuilder
