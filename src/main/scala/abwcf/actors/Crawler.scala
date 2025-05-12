@@ -97,7 +97,7 @@ object Crawler {
     )
 
     val htmlParser = context.spawn(
-      Behaviors.supervise(HtmlParser(urlNormalizer))
+      Behaviors.supervise(HtmlParser(urlNormalizer, settings))
         .onFailure(SupervisorStrategy.resume), //The HtmlParser is stateless, so resuming it is safe.
       "html-parser"
     )

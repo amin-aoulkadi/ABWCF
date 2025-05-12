@@ -1,6 +1,8 @@
 package abwcf.actors
 
 import abwcf.data.{Page, PageCandidate}
+import abwcf.metrics.HtmlParserMetrics
+import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 import org.apache.pekko.util.ByteString
@@ -20,27 +22,34 @@ object HtmlParser {
   sealed trait Command
   case class Parse(page: Page, responseBody: ByteString) extends Command
 
-  def apply(urlNormalizer: ActorRef[UrlNormalizer.Command]): Behavior[Command] = Behaviors.receiveMessage({
-    case Parse(page, responseBody) =>
-      //Parse the HTML document:
-      val document = Jsoup.parse(responseBody.utf8String, page.url)
+  def apply(urlNormalizer: ActorRef[UrlNormalizer.Command], settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
+    val metrics = HtmlParserMetrics(settings, context)
 
-      if (canFollowLinks(document)) {
-        //Get URLs from the document:
-        val urls: List[String] = document
-          .select("a[href]") //Select all <a> elements that have an href attribute.
-          .stream()
-          .map(_.absUrl("href"))
-          .distinct()
-          .filter(_.substring(0, 4).equalsIgnoreCase("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
-          .toScala(List)
+    Behaviors.receiveMessage({
+      case Parse(page, responseBody) =>
+        //Parse the HTML document:
+        val document = Jsoup.parse(responseBody.utf8String, page.url)
+        metrics.addParsedDocuments(1)
 
-        //Send the URLs to the UrlNormalizer:
-        urls.map(PageCandidate(_, page.crawlDepth + 1)) //Important: The crawl depth increases here.
-          .foreach(urlNormalizer ! UrlNormalizer.Normalize(_))
-      }
+        if (canFollowLinks(document)) {
+          //Get URLs from the document:
+          val urls: List[String] = document
+            .select("a[href]") //Select all <a> elements that have an href attribute.
+            .stream()
+            .map(_.absUrl("href"))
+            .distinct()
+            .filter(_.substring(0, 4).equalsIgnoreCase("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
+            .toScala(List)
 
-      Behaviors.same
+          //Send the URLs to the UrlNormalizer:
+          urls.map(PageCandidate(_, page.crawlDepth + 1)) //Important: The crawl depth increases here.
+            .foreach(urlNormalizer ! UrlNormalizer.Normalize(_))
+
+          metrics.addEmittedUrls(urls.length)
+        }
+
+        Behaviors.same
+    })
   })
 
   /**
