@@ -1,7 +1,7 @@
 package abwcf.data
 
 enum PageStatus {
-  case Discovered, Processed
+  case Disallowed, Discovered, Processed
 }
 
 /**

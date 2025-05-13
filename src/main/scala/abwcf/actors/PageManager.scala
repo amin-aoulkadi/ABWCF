@@ -2,7 +2,6 @@ package abwcf.actors
 
 import abwcf.actors.persistence.page.PagePersistence
 import abwcf.data.{Page, PageCandidate, PageStatus}
-import abwcf.util.UrlUtils
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, ActorSystem, Behavior}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityContext, EntityTypeKey}
@@ -27,7 +26,7 @@ object PageManager {
   sealed trait Command
   case class Discover(crawlDepth: Int) extends Command
   case class SetPriority(priority: Long) extends Command
-  case object SetStatusProcessed extends Command
+  case class SetStatus(status: PageStatus) extends Command
   private case object Passivate extends Command
 
   sealed trait PersistenceCommand extends Command //These have to be part of the public protocol so that they work with ShardingEnvelopes.
@@ -37,22 +36,24 @@ object PageManager {
 
   def apply(entityContext: EntityContext[Command],
             pagePersistenceManager: ActorRef[PagePersistence.Command],
-            prioritizer: ActorRef[Prioritizer.Command]): Behavior[Command] =
+            prioritizer: ActorRef[Prioritizer.Command],
+            strictRobotsFilter: ActorRef[StrictRobotsFilter.Command]): Behavior[Command] =
     Behaviors.setup(context => {
       Behaviors.withStash(100)(buffer => {
-        new PageManager(pagePersistenceManager, prioritizer, entityContext.shard, context, buffer).recovering(entityContext.entityId)
+        new PageManager(pagePersistenceManager, prioritizer, strictRobotsFilter, entityContext.shard, context, buffer).recovering(entityContext.entityId)
       })
   })
 
   def initializeSharding(system: ActorSystem[?],
                          pagePersistenceManager: ActorRef[PagePersistence.Command],
-                         prioritizer: ActorRef[Prioritizer.Command]): ActorRef[ShardingEnvelope[Command]] = {
+                         prioritizer: ActorRef[Prioritizer.Command],
+                         strictRobotsFilter: ActorRef[StrictRobotsFilter.Command]): ActorRef[ShardingEnvelope[Command]] = {
     val settings = ClusterShardingSettings(system)
       .withRememberEntities(false) //Pages are periodically restored by the PageRestorer, so it doesn't make sense to remember them.
       .withNoPassivationStrategy() //Disable automatic passivation.
 
     ClusterSharding(system).init(
-      Entity(TypeKey)(entityContext => PageManager(entityContext, pagePersistenceManager, prioritizer))
+      Entity(TypeKey)(entityContext => PageManager(entityContext, pagePersistenceManager, prioritizer, strictRobotsFilter))
         .withSettings(settings)
     )
   }
@@ -60,6 +61,7 @@ object PageManager {
 
 private class PageManager private(pagePersistenceManager: ActorRef[PagePersistence.Command],
                                   prioritizer: ActorRef[Prioritizer.Command],
+                                  strictRobotsFilter: ActorRef[StrictRobotsFilter.Command],
                                   shard: ActorRef[ClusterSharding.ShardCommand],
                                   context: ActorContext[PageManager.Command],
                                   buffer: StashBuffer[PageManager.Command]) {
@@ -68,14 +70,6 @@ private class PageManager private(pagePersistenceManager: ActorRef[PagePersisten
   private val sharding = ClusterSharding(context.system)
   private val config = context.system.settings.config
   private val receiveTimeout = config.getDuration("abwcf.actors.page-manager.passivation-receive-timeout").toScala
-
-  /**
-   * Adds the URL to a [[HostQueue]] so that it can be fetched.
-   */
-  private def addToHostQueue(page: Page): Unit = {
-    val hostQueue = sharding.entityRefFor(HostQueue.TypeKey, UrlUtils.getSchemeAndAuthority(page.url))
-    hostQueue ! HostQueue.Enqueue(page)
-  }
 
   private def recovering(url: String): Behavior[Command] = {
     pagePersistenceManager ! PagePersistence.Recover(url)
@@ -136,13 +130,13 @@ private class PageManager private(pagePersistenceManager: ActorRef[PagePersisten
   }
 
   private def discoveredPage(page: Page): Behavior[Command] = {
-    addToHostQueue(page)
+    strictRobotsFilter ! StrictRobotsFilter.Filter(page) //Send the page downstream so that it can be fetched.
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
 
     Behaviors.receiveMessage({
-      case SetStatusProcessed =>
-        pagePersistenceManager ! PagePersistence.UpdateStatus(page.url, PageStatus.Processed)
-        updating(page.copy(status = PageStatus.Processed))
+      case SetStatus(status) =>
+        pagePersistenceManager ! PagePersistence.UpdateStatus(page.url, status)
+        updating(page.copy(status = status))
 
       case Passivate =>
         shard ! ClusterSharding.Passivate(context.self)

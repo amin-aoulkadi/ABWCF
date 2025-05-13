@@ -1,6 +1,6 @@
 package abwcf.actors
 
-import abwcf.data.{FetchResponse, Page}
+import abwcf.data.{FetchResponse, Page, PageStatus}
 import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
@@ -29,7 +29,7 @@ object UserCodeRunner {
      */
     def notifyPageManager(page: Page): Unit = {
       val pageManager = sharding.entityRefFor(PageManager.TypeKey, page.url)
-      pageManager ! PageManager.SetStatusProcessed
+      pageManager ! PageManager.SetStatus(PageStatus.Processed)
     }
 
     Behaviors.receiveMessage({

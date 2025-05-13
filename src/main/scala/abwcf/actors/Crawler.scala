@@ -61,10 +61,16 @@ object Crawler {
       "prioritizer"
     )
 
+    val strictRobotsFilter = context.spawn(
+      Behaviors.supervise(StrictRobotsFilter())
+        .onFailure(SupervisorStrategy.resume), //Restarting would mean repopulating the cache (which is rather expensive).
+      "strict-robots-filter"
+    )
+
     //Initialize shard regions:
     HostManager.initializeSharding(system, hostPersistenceManager, robotsFetcherManager)
     HostQueue.initializeSharding(system)
-    PageManager.initializeSharding(system, pagePersistenceManager, prioritizer)
+    PageManager.initializeSharding(system, pagePersistenceManager, prioritizer, strictRobotsFilter)
 
     val pageRestorer = context.spawn(
       Behaviors.supervise(PageRestorer(pagePersistenceManager))
@@ -78,14 +84,14 @@ object Crawler {
       "user-code-runner"
     )
 
-    val robotsFilter = context.spawn(
-      Behaviors.supervise(RobotsFilter())
+    val lenientRobotsFilter = context.spawn(
+      Behaviors.supervise(LenientRobotsFilter())
         .onFailure(SupervisorStrategy.resume), //Restarting would mean losing all pending candidates and repopulating the cache (which is rather expensive).
-      "robots-filter"
+      "lenient-robots-filter"
     )
 
     val urlFilter = context.spawn(
-      Behaviors.supervise(UrlFilter(robotsFilter))
+      Behaviors.supervise(UrlFilter(lenientRobotsFilter))
         .onFailure(SupervisorStrategy.resume), //The UrlFilter is stateless, so resuming it is safe.
       "url-filter"
     )
