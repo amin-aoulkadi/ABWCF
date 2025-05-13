@@ -1,7 +1,8 @@
 package abwcf.actors
 
 import abwcf.data.{HostInformation, Page, PageStatus}
-import abwcf.util.UrlUtils
+import abwcf.metrics.StrictRobotsFilterMetrics
+import abwcf.util.{CrawlerSettings, UrlUtils}
 import com.github.benmanes.caffeine.cache.{Caffeine, Expiry}
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
@@ -33,12 +34,12 @@ object StrictRobotsFilter {
 
   private type CombinedCommand = Command | HostManager.HostInfo
 
-  def apply(): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
-    new StrictRobotsFilter(context).strictRobotsFilter()
+  def apply(settings: CrawlerSettings): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+    new StrictRobotsFilter(settings, context).strictRobotsFilter()
   }).narrow
 }
 
-private class StrictRobotsFilter private (context: ActorContext[StrictRobotsFilter.CombinedCommand]) {
+private class StrictRobotsFilter private (settings: CrawlerSettings, context: ActorContext[StrictRobotsFilter.CombinedCommand]) {
   import StrictRobotsFilter.*
 
   private val sharding = ClusterSharding(context.system)
@@ -57,12 +58,15 @@ private class StrictRobotsFilter private (context: ActorContext[StrictRobotsFilt
       case (_, Some(hostInfo)) => Instant.now.until(hostInfo.validUntil)
       case (_, None) => failCloseDuration
     }))
+    .recordStats() //Needed for metrics.
     .build[String, Option[HostInformation]]()
 
   /**
    * Buffers [[Page]]s while the request for the required [[HostInformation]] is in progress.
    */
   private val pendingPages = mutable.HashMap.empty[String, mutable.ArrayBuffer[Page]] //Mutable state!
+
+  private val metrics = StrictRobotsFilterMetrics(settings, context, hostInfoCache)
 
   private def strictRobotsFilter(): Behavior[CombinedCommand] = Behaviors.receiveMessage({
     case Filter(page) =>
@@ -71,7 +75,7 @@ private class StrictRobotsFilter private (context: ActorContext[StrictRobotsFilt
 
       cachedValue match {
         case Some(hostInfo) => filterPage(page, hostInfo) //Cache hit
-        case None => () //Cache hit, but the HostInformation is marked as unavailable. The page is ignored.
+        case None => metrics.addIgnoredPages(1) //Cache hit, but the HostInformation is marked as unavailable. The page is ignored.
 
         case null => //Cache miss
           //Buffer the page:
@@ -103,7 +107,8 @@ private class StrictRobotsFilter private (context: ActorContext[StrictRobotsFilt
 
     case AskFailure(schemeAndAuthority) =>
       hostInfoCache.put(schemeAndAuthority, None) //Mark the HostInformation as unavailable.
-      pendingPages.remove(schemeAndAuthority) //Drop the buffered pages.
+      val pages = pendingPages.remove(schemeAndAuthority) //Drop the buffered pages.
+      metrics.addIgnoredPages(pages.size)
       Behaviors.same
   })
 
@@ -118,9 +123,11 @@ private class StrictRobotsFilter private (context: ActorContext[StrictRobotsFilt
     if (hostInfo.robotRules.isAllowed(page.url)) {
       val hostQueue = sharding.entityRefFor(HostQueue.TypeKey, UrlUtils.getSchemeAndAuthority(page.url))
       hostQueue ! HostQueue.Enqueue(page)
+      metrics.addFilterPassed(1)
     } else {
       val pageManager = sharding.entityRefFor(PageManager.TypeKey, page.url)
       pageManager ! PageManager.SetStatus(PageStatus.Disallowed)
+      metrics.addFilterRejected(1)
     }
   }
 }

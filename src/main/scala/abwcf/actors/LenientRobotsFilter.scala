@@ -1,7 +1,8 @@
 package abwcf.actors
 
 import abwcf.data.{HostInformation, PageCandidate}
-import abwcf.util.UrlUtils
+import abwcf.metrics.LenientRobotsFilterMetrics
+import abwcf.util.{CrawlerSettings, UrlUtils}
 import com.github.benmanes.caffeine.cache.{Caffeine, Expiry}
 import crawlercommons.robots.SimpleRobotRules
 import crawlercommons.robots.SimpleRobotRules.RobotRulesMode
@@ -34,12 +35,12 @@ object LenientRobotsFilter {
 
   private type CombinedCommand = Command | HostManager.HostInfo
 
-  def apply(): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
-    new LenientRobotsFilter(context).lenientRobotsFilter()
+  def apply(settings: CrawlerSettings): Behavior[Command] = Behaviors.setup[CombinedCommand](context => {
+    new LenientRobotsFilter(settings, context).lenientRobotsFilter()
   }).narrow
 }
 
-private class LenientRobotsFilter private (context: ActorContext[LenientRobotsFilter.CombinedCommand]) {
+private class LenientRobotsFilter private (settings: CrawlerSettings, context: ActorContext[LenientRobotsFilter.CombinedCommand]) {
   import LenientRobotsFilter.*
 
   private val sharding = ClusterSharding(context.system)
@@ -51,12 +52,15 @@ private class LenientRobotsFilter private (context: ActorContext[LenientRobotsFi
   private val hostInfoCache = Caffeine.newBuilder() //Mutable state!
     .maximumSize(maxCacheSize)
     .expireAfter(Expiry.writing[String, HostInformation]((_, hostInfo) => Instant.now.until(hostInfo.validUntil)))
+    .recordStats() //Needed for metrics.
     .build[String, HostInformation]()
 
   /**
    * Buffers URLs while the request for the required [[HostInformation]] is in progress.
    */
   private val pendingCandidates = mutable.HashMap.empty[String, mutable.ArrayBuffer[PageCandidate]] //Mutable state!
+
+  private val metrics = LenientRobotsFilterMetrics(settings, context, hostInfoCache)
 
   private def lenientRobotsFilter(): Behavior[CombinedCommand] = Behaviors.receiveMessage({
     case Filter(candidate) =>
@@ -81,10 +85,7 @@ private class LenientRobotsFilter private (context: ActorContext[LenientRobotsFi
           })(using askTimeout)
         }
       } else { //Cache hit
-        //Filter the URL:
-        if (hostInfo.robotRules.isAllowed(candidate.url)) {
-          discoverPage(candidate)
-        }
+        filterPageCandidate(candidate, hostInfo)
       }
 
       Behaviors.same
@@ -95,14 +96,23 @@ private class LenientRobotsFilter private (context: ActorContext[LenientRobotsFi
       //Filter the buffered URLs:
       pendingCandidates.remove(hostInfo.schemeAndAuthority)
         .getOrElse(mutable.ArrayBuffer.empty)
-        .filter(candidate => hostInfo.robotRules.isAllowed(candidate.url))
-        .foreach(discoverPage)
+        .foreach(candidate => filterPageCandidate(candidate, hostInfo))
 
       Behaviors.same
   })
 
-  private def discoverPage(candidate: PageCandidate): Unit = {
-    val pageManager = sharding.entityRefFor(PageManager.TypeKey, candidate.url)
-    pageManager ! PageManager.Discover(candidate.crawlDepth)
+  /**
+   * Checks if the [[PageCandidate]] is allowed to be crawled based on the Robots Exclusion Protocol.
+   *
+   * If crawling is allowed, the [[PageCandidate]] is sent to a [[PageManager]] so that it can be discovered.
+   */
+  private def filterPageCandidate(candidate: PageCandidate, hostInfo: HostInformation): Unit = {
+    if (hostInfo.robotRules.isAllowed(candidate.url)) {
+      val pageManager = sharding.entityRefFor(PageManager.TypeKey, candidate.url)
+      pageManager ! PageManager.Discover(candidate.crawlDepth)
+      metrics.addFilterPassed(1)
+    } else {
+      metrics.addFilterRejected(1)
+    }
   }
 }

@@ -62,7 +62,7 @@ object Crawler {
     )
 
     val strictRobotsFilter = context.spawn(
-      Behaviors.supervise(StrictRobotsFilter())
+      Behaviors.supervise(StrictRobotsFilter(settings))
         .onFailure(SupervisorStrategy.resume), //Restarting would mean repopulating the cache (which is rather expensive).
       "strict-robots-filter"
     )
@@ -85,7 +85,7 @@ object Crawler {
     )
 
     val lenientRobotsFilter = context.spawn(
-      Behaviors.supervise(LenientRobotsFilter())
+      Behaviors.supervise(LenientRobotsFilter(settings))
         .onFailure(SupervisorStrategy.resume), //Restarting would mean losing all pending candidates and repopulating the cache (which is rather expensive).
       "lenient-robots-filter"
     )
