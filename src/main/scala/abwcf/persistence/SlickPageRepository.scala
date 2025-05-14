@@ -16,8 +16,21 @@ class SlickPageRepository(using session: SlickSession, materializer: Materialize
    */
   private given getPageResult: GetResult[Page] = GetResult(r => Page(r.<<, PageStatus.valueOf(r.<<), r.<<, r.<<))
 
-  override def insert(page: Page): Future[Int] = {
-    val query = sqlu"""INSERT INTO pages VALUES (${page.url}, ${page.status.toString}, ${page.crawlDepth}, ${page.crawlPriority})"""
+  override def insert(pages: Iterable[Page]): Future[Array[Int]] = {
+    val query = SimpleDBIO(context => {
+      val statement = context.connection.prepareStatement("INSERT INTO pages VALUES (?, ?, ?, ?)")
+
+      pages.foreach(page => {
+        statement.setString(1, page.url)
+        statement.setString(2, page.status.toString)
+        statement.setInt(3, page.crawlDepth)
+        statement.setLong(4, page.crawlPriority)
+        statement.addBatch()
+      })
+
+      statement.executeBatch()
+    })
+
     session.db.run(query)
   }
 

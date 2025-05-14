@@ -44,7 +44,7 @@ object PageReader {
         Behaviors.same
 
       case FutureFailure(throwable) =>
-        context.log.error("Exception while inserting", throwable)
+        context.log.error("Exception while reading", throwable)
         Behaviors.same
     })
   })
