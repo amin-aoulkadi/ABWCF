@@ -12,7 +12,7 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 
 /**
- * Executes `SELECT` queries.
+ * Handles [[Page]]-related `SELECT` queries.
  *
  * There should be one [[PageReader]] actor per node.
  *

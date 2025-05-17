@@ -33,9 +33,20 @@ class SlickPageRepository(using session: SlickSession, materializer: Materialize
 
     session.db.run(query)
   }
-
-  override def updateStatus(url: String, status: PageStatus): Future[Int] = {
-    val query = sqlu"""UPDATE pages SET status = ${status.toString} WHERE url = $url"""
+  
+  override def updateStatus(batch: Iterable[(String, PageStatus)]): Future[Array[Int]] = {
+    val query = SimpleDBIO(context => {
+      val statement = context.connection.prepareStatement("UPDATE pages SET status = ? WHERE url = ?")
+      
+      batch.foreach((url, status) => {
+        statement.setString(1, status.toString)
+        statement.setString(2, url)
+        statement.addBatch()
+      })
+      
+      statement.executeBatch()
+    })
+    
     session.db.run(query)
   }
 
