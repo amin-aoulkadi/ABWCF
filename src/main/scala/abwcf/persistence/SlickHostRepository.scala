@@ -75,14 +75,22 @@ class SlickHostRepository(using session: SlickSession, materializer: Materialize
     session.db.run(query)
   }
 
-  override def update(hostInfo: HostInformation): Future[Int] = {
-    val schemeAndAuthority = hostInfo.schemeAndAuthority
-    val ruleMode = ruleModeToString(hostInfo.robotRules)
-    val robotRules = rulesToString(hostInfo.robotRules)
-    val crawlDelay = hostInfo.robotRules.getCrawlDelay
-    val validUntil = Timestamp.from(hostInfo.validUntil)
+  override def update(batch: Iterable[HostInformation]): Future[Array[Int]] = {
+    val query = SimpleDBIO(context => {
+      val statement = context.connection.prepareStatement("UPDATE hosts SET rule_mode = ?, robot_rules = ?, crawl_delay = ?, valid_until = ? WHERE scheme_and_authority = ?")
 
-    val query = sqlu"""UPDATE hosts SET rule_mode = $ruleMode, robot_rules = $robotRules, crawl_delay = $crawlDelay, valid_until = $validUntil WHERE scheme_and_authority = $schemeAndAuthority"""
+      batch.foreach(hostInfo => {
+        statement.setString(1, ruleModeToString(hostInfo.robotRules))
+        statement.setString(2, rulesToString(hostInfo.robotRules))
+        statement.setLong(3, hostInfo.robotRules.getCrawlDelay)
+        statement.setTimestamp(4, Timestamp.from(hostInfo.validUntil))
+        statement.setString(5, hostInfo.schemeAndAuthority)
+        statement.addBatch()
+      })
+
+      statement.executeBatch()
+    })
+
     session.db.run(query)
   }
 
