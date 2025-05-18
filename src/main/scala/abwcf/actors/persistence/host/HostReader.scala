@@ -33,7 +33,7 @@ private class HostReader private (hostRepository: HostRepository, context: Actor
 
   private val sharding = ClusterSharding(context.system)
   private val config = context.system.settings.config
-  private val maxActiveQueries = config.getInt("abwcf.persistence.host.select.max-active-recovery-queries")
+  private val maxActiveQueries = config.getInt("abwcf.persistence.slick.host.select.max-active-recovery-queries")
 
   private val pendingRecoveries = mutable.Queue.empty[String] //Mutable state!
   private var activeQueries = 0 //Mutable state!

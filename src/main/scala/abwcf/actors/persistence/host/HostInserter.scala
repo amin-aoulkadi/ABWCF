@@ -22,8 +22,8 @@ object HostInserter {
   def apply(hostRepository: HostRepository): Behavior[Command | HostPersistence.InsertCommand] = Behaviors.setup[CombinedCommand](context => {
     val sharding = ClusterSharding(context.system)
     val config = context.system.settings.config
-    val maxBatchSize = config.getInt("abwcf.persistence.host.insert.max-batch-size")
-    val maxBatchDelay = config.getDuration("abwcf.persistence.host.insert.max-batch-delay").toScala
+    val maxBatchSize = config.getInt("abwcf.persistence.slick.host.insert.max-batch-size")
+    val maxBatchDelay = config.getDuration("abwcf.persistence.slick.host.insert.max-batch-delay").toScala
 
     val batcher = context.spawnAnonymous(
       Behaviors.supervise(Batcher(maxBatchSize, maxBatchDelay, context.self))

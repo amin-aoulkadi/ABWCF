@@ -39,7 +39,7 @@ private class PageReader private (pageRepository: PageRepository, context: Actor
 
   private val sharding = ClusterSharding(context.system)
   private val config = context.system.settings.config
-  private val maxActiveQueries = config.getInt("abwcf.persistence.page.select.max-active-recovery-queries")
+  private val maxActiveQueries = config.getInt("abwcf.persistence.slick.page.select.max-active-recovery-queries")
 
   private val pendingRecoveries = mutable.Queue.empty[String] //Mutable state!
   private var activeQueries = 0 //Mutable state!

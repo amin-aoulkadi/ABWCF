@@ -12,7 +12,7 @@ object CoordinatedSlickSession {
    * Creates a new [[SlickSession]] that is closed automatically when the actor system terminates.
    */
   def create(system: ActorSystem[?]): SlickSession = {
-    val session = SlickSession.forConfig("abwcf.persistence.slick-config")
+    val session = SlickSession.forConfig("abwcf.persistence.slick.database")
 
     CoordinatedShutdown(system).addTask(CoordinatedShutdown.PhaseBeforeActorSystemTerminate, "close-database-resources")(() => {
       Future({
