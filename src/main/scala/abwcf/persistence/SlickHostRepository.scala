@@ -56,14 +56,22 @@ class SlickHostRepository(using session: SlickSession, materializer: Materialize
     case _ => RobotRulesMode.ALLOW_SOME.toString
   }
 
-  override def insert(hostInfo: HostInformation): Future[Int] = {
-    val schemeAndAuthority = hostInfo.schemeAndAuthority
-    val ruleMode = ruleModeToString(hostInfo.robotRules)
-    val robotRules = rulesToString(hostInfo.robotRules)
-    val crawlDelay = hostInfo.robotRules.getCrawlDelay
-    val validUntil = Timestamp.from(hostInfo.validUntil)
+  override def insert(batch: Iterable[HostInformation]): Future[Array[Int]] = {
+    val query = SimpleDBIO(context => {
+      val statement = context.connection.prepareStatement("INSERT INTO hosts VALUES (?, ?, ?, ?, ?)")
 
-    val query = sqlu"""INSERT INTO hosts VALUES ($schemeAndAuthority, $ruleMode, $robotRules, $crawlDelay, $validUntil)"""
+      batch.foreach(hostInfo => {
+        statement.setString(1, hostInfo.schemeAndAuthority)
+        statement.setString(2, ruleModeToString(hostInfo.robotRules))
+        statement.setString(3, rulesToString(hostInfo.robotRules))
+        statement.setLong(4, hostInfo.robotRules.getCrawlDelay)
+        statement.setTimestamp(5, Timestamp.from(hostInfo.validUntil))
+        statement.addBatch()
+      })
+
+      statement.executeBatch()
+    })
+
     session.db.run(query)
   }
 

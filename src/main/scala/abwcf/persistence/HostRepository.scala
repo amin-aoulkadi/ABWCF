@@ -5,7 +5,7 @@ import abwcf.data.HostInformation
 import scala.concurrent.Future
 
 trait HostRepository {
-  def insert(hostInfo: HostInformation): Future[Int]
+  def insert(batch: Iterable[HostInformation]): Future[Array[Int]]
   def update(hostInfo: HostInformation): Future[Int]
   def findBySchemeAndAuthority(schemeAndAuthority: String): Future[Option[HostInformation]]
 }

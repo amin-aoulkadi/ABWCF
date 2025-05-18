@@ -14,7 +14,7 @@ import scala.util.{Failure, Success}
 
 object PageInserter {
   sealed trait Command
-  private case class FutureSuccess(pages: Seq[Page]) extends Command
+  private case class FutureSuccess(batch: Seq[Page]) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
   private type CombinedCommand = Command | PagePersistence.InsertCommand | Batcher.Batch[Page]
@@ -35,16 +35,16 @@ object PageInserter {
         batcher ! Batcher.Add(page)
         Behaviors.same
 
-      case Batcher.Batch(pages: Seq[Page] @unchecked) =>
-        context.pipeToSelf(pageRepository.insert(pages))({
-          case Success(_) => FutureSuccess(pages)
+      case Batcher.Batch(batch: Seq[Page] @unchecked) =>
+        context.pipeToSelf(pageRepository.insert(batch))({
+          case Success(_) => FutureSuccess(batch)
           case Failure(throwable) => FutureFailure(throwable)
         })
         Behaviors.same
 
-      case FutureSuccess(pages) =>
+      case FutureSuccess(batch) =>
         //Notify the PageManagers:
-        pages.map(_.url)
+        batch.map(_.url)
           .foreach(url => {
             val pageManager = sharding.entityRefFor(PageManager.TypeKey, url)
             pageManager ! PageManager.InsertSuccess
