@@ -18,7 +18,7 @@ import scala.util.{Failure, Success}
  *
  * This actor is stateful.
  *
- * @note Under the hood, database queries are executed by a [[java.util.concurrent.Executor]] with a size-limited task queue. The following problem was discovered during testing:<br>
+ * @note Under the hood, database communication is handled by a [[java.util.concurrent.Executor]] with a size-limited task queue. The following problem was discovered during testing:<br>
  *       If every recovery query was started immediately upon arrival of the [[Recover]] message, the executor's task queue would fill up. Once it was full, all excess queries (not just recovery queries, but any type of database query) immediately failed with a [[java.util.concurrent.RejectedExecutionException]].<br>
  *       To avoid completely filling the executor's task queue, the [[PageReader]] limits the number of active recovery queries and buffers excess recovery queries in its own unbounded queue.
  */
