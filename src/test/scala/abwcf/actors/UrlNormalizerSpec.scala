@@ -65,4 +65,10 @@ class UrlNormalizerSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
   it should "work with percent-encoded characters" in {
     test("https://user@example.com/abc/%3F%23%2F%5B%5D/def?%3F%23%2F%5B%5D#%3F%23%2F%5B%5D", "https://example.com/abc/%3F%23%2F%5B%5D/def")
   }
+
+  it should "work with internationalized domain names" in {
+    test("https://aäeéoöuü.example/", "https://xn--aeou-loa5a0g3b.example/")
+    test("https://😃.example/", "https://xn--h28h.example/")
+    test("https://user@😃.example/", "https://xn--h28h.example/")
+  }
 }
