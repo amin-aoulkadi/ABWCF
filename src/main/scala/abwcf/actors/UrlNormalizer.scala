@@ -31,6 +31,7 @@ object UrlNormalizer {
     val removeUserInfo = config.getBoolean("abwcf.actors.url-normalizer.remove-userinfo")
     val removeQuery = config.getBoolean("abwcf.actors.url-normalizer.remove-query")
     val removeFragment = config.getBoolean("abwcf.actors.url-normalizer.remove-fragment")
+    val logExceptions = config.getBoolean("abwcf.actors.url-normalizer.log-exceptions")
     val metrics = UrlNormalizerMetrics(settings, context)
 
     Behaviors.receiveMessage({
@@ -61,7 +62,7 @@ object UrlNormalizer {
           urlFilter ! UrlFilter.Filter(candidate.copy(url = normalized.toString))
         } catch {
           case e: Exception =>
-            context.log.error("Exception while normalizing URL {}", candidate.url, e)
+            if logExceptions then context.log.error("Exception while normalizing URL {}", candidate.url, e)
             metrics.addException(e)
         }
 
