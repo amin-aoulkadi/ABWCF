@@ -102,8 +102,14 @@ object Crawler {
       "url-normalizer"
     )
 
+    val urlDeduplicator = context.spawn(
+      Behaviors.supervise(UrlDeduplicator(urlNormalizer, settings))
+        .onFailure[URISyntaxException](SupervisorStrategy.resume), //Restarting would mean repopulating the cache.
+      "url-deduplicator"
+    )
+
     val htmlParser = context.spawn(
-      Behaviors.supervise(HtmlParser(urlNormalizer, settings))
+      Behaviors.supervise(HtmlParser(urlDeduplicator, settings))
         .onFailure(SupervisorStrategy.resume), //The HtmlParser is stateless, so resuming it is safe.
       "html-parser"
     )

@@ -22,7 +22,7 @@ object HtmlParser {
   sealed trait Command
   case class Parse(page: Page, responseBody: ByteString) extends Command
 
-  def apply(urlNormalizer: ActorRef[UrlNormalizer.Command], settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
+  def apply(urlDeduplicator: ActorRef[UrlDeduplicator.Command], settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
     val metrics = HtmlParserMetrics(settings, context)
 
     Behaviors.receiveMessage({
@@ -41,9 +41,9 @@ object HtmlParser {
             .filter(_.substring(0, 4).equalsIgnoreCase("http")) //Drop non-HTTP URLs (e.g. "mailto:someone@example.com").
             .toScala(List)
 
-          //Send the URLs to the UrlNormalizer:
+          //Send the URLs downstream:
           urls.map(PageCandidate(_, page.crawlDepth + 1)) //Important: The crawl depth increases here.
-            .foreach(urlNormalizer ! UrlNormalizer.Normalize(_))
+            .foreach(urlDeduplicator ! UrlDeduplicator.Deduplicate(_))
 
           metrics.addEmittedUrls(urls.length)
         }
