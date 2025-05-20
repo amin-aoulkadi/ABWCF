@@ -10,11 +10,11 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
 /**
  * Executes user-defined code to process crawled pages.
  *
- * There should be one [[UserCodeRunner]] actor per node.
+ * There should be one [[FetchResultConsumer]] actor per node.
  *
  * This actor is stateless.
  */
-object UserCodeRunner { //TODO: Rename to FetchResultConsumer.
+object FetchResultConsumer {
   def apply(settings: CrawlerSettings): Behavior[FetchResult.Command] = Behaviors.setup(context => {
     val sharding = ClusterSharding(context.system)
 

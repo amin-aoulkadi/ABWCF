@@ -1,6 +1,6 @@
 package abwcf.util
 
-import abwcf.actors.UserCodeRunner
+import abwcf.actors.FetchResultConsumer
 import abwcf.data.{FetchResponse, Page, PageCandidate}
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
@@ -29,7 +29,7 @@ trait UserCode {
    *
    * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
    *
-   * This method is used by the [[UserCodeRunner]] actor.
+   * This method is used by the [[FetchResultConsumer]] actor.
    *
    * The default implementation does nothing.
    */
@@ -40,7 +40,7 @@ trait UserCode {
    *
    * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
    *
-   * This method is used by the [[UserCodeRunner]] actor.
+   * This method is used by the [[FetchResultConsumer]] actor.
    *
    * The default implementation does nothing.
    */
@@ -51,7 +51,7 @@ trait UserCode {
    *
    * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
    *
-   * This method is used by the [[UserCodeRunner]] actor.
+   * This method is used by the [[FetchResultConsumer]] actor.
    *
    * The default implementation does nothing.
    */
@@ -62,7 +62,7 @@ trait UserCode {
    *
    * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
    *
-   * This method is used by the [[UserCodeRunner]] actor.
+   * This method is used by the [[FetchResultConsumer]] actor.
    *
    * The default implementation does nothing.
    */
@@ -71,7 +71,7 @@ trait UserCode {
   /**
    * Creates a new fetch result consumer.
    *
-   * The default implementation creates a new [[UserCodeRunner]].
+   * The default implementation creates a new [[FetchResultConsumer]].
    *
    * @note Implementations must always notify the relevant [[abwcf.actors.PageManager]] with a [[abwcf.actors.PageManager.SetStatus]] message after processing a [[FetchResult.Command]]:
    *       {{{
@@ -100,5 +100,5 @@ trait UserCode {
    *       }}}
    */
   def createFetchResultConsumer(settings: CrawlerSettings): Behavior[FetchResult.Command] =
-    UserCodeRunner(settings)
+    FetchResultConsumer(settings)
 }
