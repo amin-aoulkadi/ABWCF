@@ -79,8 +79,8 @@ object Crawler {
     )
 
     val userCodeRunner = context.spawn(
-      Behaviors.supervise(UserCodeRunner(settings))
-        .onFailure(SupervisorStrategy.resume), //The UserCodeRunner is stateless, so resuming it is safe.
+      Behaviors.supervise(settings.userCode.createUserCodeRunner(settings))
+        .onFailure(SupervisorStrategy.restart),
       "user-code-runner"
     )
 
