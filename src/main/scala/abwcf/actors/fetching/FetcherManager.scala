@@ -1,8 +1,8 @@
 package abwcf.actors.fetching
 
 import abwcf.actors.*
+import abwcf.api.{CrawlerSettings, FetchResult}
 import abwcf.metrics.FetcherManagerMetrics
-import abwcf.util.{CrawlerSettings, FetchResult}
 import org.apache.pekko.Done
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy, Terminated}

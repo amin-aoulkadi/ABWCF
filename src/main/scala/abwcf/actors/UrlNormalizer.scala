@@ -1,8 +1,8 @@
 package abwcf.actors
 
+import abwcf.api.CrawlerSettings
 import abwcf.data.PageCandidate
 import abwcf.metrics.UrlNormalizerMetrics
-import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
 

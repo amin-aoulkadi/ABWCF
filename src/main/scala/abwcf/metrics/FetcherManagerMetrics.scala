@@ -1,6 +1,6 @@
 package abwcf.metrics
 
-import abwcf.util.CrawlerSettings
+import abwcf.api.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
 
 object FetcherManagerMetrics {

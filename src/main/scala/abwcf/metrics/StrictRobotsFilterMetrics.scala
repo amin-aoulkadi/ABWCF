@@ -1,7 +1,7 @@
 package abwcf.metrics
 
 import abwcf.actors.StrictRobotsFilter
-import abwcf.util.CrawlerSettings
+import abwcf.api.CrawlerSettings
 import com.github.benmanes.caffeine.cache.Cache
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
 

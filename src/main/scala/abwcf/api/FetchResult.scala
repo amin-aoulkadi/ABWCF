@@ -1,4 +1,4 @@
-package abwcf.util
+package abwcf.api
 
 import abwcf.data.{FetchResponse, Page}
 import org.apache.pekko.http.scaladsl.model.StatusCode

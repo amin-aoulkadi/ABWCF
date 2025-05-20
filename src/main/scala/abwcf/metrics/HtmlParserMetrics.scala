@@ -1,7 +1,7 @@
 package abwcf.metrics
 
 import abwcf.actors.HtmlParser
-import abwcf.util.CrawlerSettings
+import abwcf.api.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
 
 object HtmlParserMetrics {

@@ -1,8 +1,8 @@
 package abwcf.actors.metrics
 
 import abwcf.actors.{HostManager, HostQueue, PageManager}
+import abwcf.api.CrawlerSettings
 import abwcf.metrics.AttributeKeys
-import abwcf.util.CrawlerSettings
 import io.opentelemetry.api.common.Attributes
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors

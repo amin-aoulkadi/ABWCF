@@ -1,4 +1,4 @@
-package abwcf.util
+package abwcf.api
 
 import io.opentelemetry.api.OpenTelemetry
 

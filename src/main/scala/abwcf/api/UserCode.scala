@@ -1,4 +1,4 @@
-package abwcf.util
+package abwcf.api
 
 import abwcf.actors.FetchResultConsumer
 import abwcf.data.{FetchResponse, Page, PageCandidate}

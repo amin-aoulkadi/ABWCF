@@ -1,7 +1,7 @@
 package abwcf.actors
 
+import abwcf.api.CrawlerSettings
 import abwcf.data.PageCandidate
-import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding

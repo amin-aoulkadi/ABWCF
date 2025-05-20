@@ -1,9 +1,10 @@
 package abwcf.actors.fetching
 
 import abwcf.actors.*
+import abwcf.api.{CrawlerSettings, FetchResult}
 import abwcf.data.{FetchResponse, Page, PageCandidate}
 import abwcf.metrics.FetcherMetrics
-import abwcf.util.{CrawlerSettings, FetchResult, HttpUtils}
+import abwcf.util.HttpUtils
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}

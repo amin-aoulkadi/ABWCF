@@ -1,8 +1,8 @@
 package abwcf.actors
 
+import abwcf.api.FetchResult.*
+import abwcf.api.{CrawlerSettings, FetchResult}
 import abwcf.data.{Page, PageStatus}
-import abwcf.util.FetchResult.*
-import abwcf.util.{CrawlerSettings, FetchResult}
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding

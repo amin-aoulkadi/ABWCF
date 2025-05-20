@@ -1,8 +1,9 @@
 package abwcf.actors
 
+import abwcf.api.CrawlerSettings
 import abwcf.data.{HostInformation, Page, PageStatus}
 import abwcf.metrics.StrictRobotsFilterMetrics
-import abwcf.util.{CrawlerSettings, UrlUtils}
+import abwcf.util.UrlUtils
 import com.github.benmanes.caffeine.cache.{Caffeine, Expiry}
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}

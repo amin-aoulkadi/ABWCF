@@ -1,7 +1,7 @@
 package abwcf.metrics
 
 import abwcf.actors.fetching.Fetcher
-import abwcf.util.CrawlerSettings
+import abwcf.api.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
 import org.apache.pekko.http.scaladsl.model.HttpResponse
 

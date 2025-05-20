@@ -1,7 +1,7 @@
 package abwcf.actors
 
+import abwcf.api.CrawlerSettings
 import abwcf.metrics.RobotsFetcherManagerMetrics
-import abwcf.util.CrawlerSettings
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 

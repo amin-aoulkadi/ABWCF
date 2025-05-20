@@ -1,8 +1,9 @@
 package abwcf.actors
 
+import abwcf.api.CrawlerSettings
 import abwcf.data.{HostInformation, PageCandidate}
 import abwcf.metrics.LenientRobotsFilterMetrics
-import abwcf.util.{CrawlerSettings, UrlUtils}
+import abwcf.util.UrlUtils
 import com.github.benmanes.caffeine.cache.{Caffeine, Expiry}
 import crawlercommons.robots.SimpleRobotRules
 import crawlercommons.robots.SimpleRobotRules.RobotRulesMode

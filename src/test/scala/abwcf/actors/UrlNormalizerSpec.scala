@@ -1,7 +1,7 @@
 package abwcf.actors
 
+import abwcf.api.CrawlerSettings
 import abwcf.data.PageCandidate
-import abwcf.util.CrawlerSettings
 import com.typesafe.config.ConfigFactory
 import org.apache.pekko.actor.testkit.typed.scaladsl.{BehaviorTestKit, TestInbox}
 import org.scalatest.flatspec.AnyFlatSpec

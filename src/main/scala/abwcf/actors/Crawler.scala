@@ -4,9 +4,9 @@ import abwcf.actors.fetching.FetcherManager
 import abwcf.actors.metrics.ClusterNodeMetricsCollector
 import abwcf.actors.persistence.host.HostPersistenceManager
 import abwcf.actors.persistence.page.PagePersistenceManager
+import abwcf.api.CrawlerSettings
 import abwcf.data.PageCandidate
 import abwcf.persistence.{CoordinatedSlickSession, SlickHostRepository, SlickPageRepository}
-import abwcf.util.CrawlerSettings
 import org.apache.pekko.Done
 import org.apache.pekko.actor.CoordinatedShutdown
 import org.apache.pekko.actor.typed.scaladsl.AskPattern.*
