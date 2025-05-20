@@ -1,11 +1,11 @@
 package abwcf.actors
 
-import abwcf.data.{FetchResponse, Page, PageStatus}
-import abwcf.util.CrawlerSettings
+import abwcf.data.{Page, PageStatus}
+import abwcf.util.FetchResult.*
+import abwcf.util.{CrawlerSettings, FetchResult}
 import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
-import org.apache.pekko.http.scaladsl.model.StatusCode
 
 /**
  * Executes user-defined code to process crawled pages.
@@ -14,14 +14,8 @@ import org.apache.pekko.http.scaladsl.model.StatusCode
  *
  * This actor is stateless.
  */
-object UserCodeRunner {
-  sealed trait Command
-  case class Success(page: Page, response: FetchResponse) extends Command
-  case class Redirect(page: Page, statusCode: StatusCode, redirectTo: Option[String]) extends Command
-  case class Error(page: Page, statusCode: StatusCode) extends Command
-  case class LengthLimitExceeded(page: Page, response: FetchResponse) extends Command
-
-  def apply(settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
+object UserCodeRunner { //TODO: Rename to FetchResultConsumer.
+  def apply(settings: CrawlerSettings): Behavior[FetchResult.Command] = Behaviors.setup(context => {
     val sharding = ClusterSharding(context.system)
 
     /**

@@ -2,7 +2,7 @@ package abwcf.actors.fetching
 
 import abwcf.actors.*
 import abwcf.metrics.FetcherManagerMetrics
-import abwcf.util.CrawlerSettings
+import abwcf.util.{CrawlerSettings, FetchResult}
 import org.apache.pekko.Done
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy, Terminated}
@@ -25,9 +25,9 @@ object FetcherManager {
   private type CombinedCommand = Command | ManagementDataAggregator.Reply
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+            fetchResultConsumer: ActorRef[FetchResult.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command],
-            userCodeRunner: ActorRef[UserCodeRunner.Command],
             settings: CrawlerSettings): Behavior[Command] =
     Behaviors.setup[CombinedCommand](context => {
       Behaviors.withTimers(timers => {
@@ -44,16 +44,16 @@ object FetcherManager {
         //Periodically adjust the number of Fetchers:
         timers.startTimerWithFixedDelay(ScaleFetchers, initialDelay, managementDelay)
 
-        new FetcherManager(crawlDepthLimiter, hostQueueRouter, managementDataAggregator, urlNormalizer, userCodeRunner, settings, context).fetcherManager()
+        new FetcherManager(crawlDepthLimiter, fetchResultConsumer, hostQueueRouter, managementDataAggregator, urlNormalizer, settings, context).fetcherManager()
       })
     }).narrow
 }
 
 private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+                                      fetchResultConsumer: ActorRef[FetchResult.Command],
                                       hostQueueRouter: ActorRef[HostQueue.Command],
                                       managementDataAggregator: ActorRef[ManagementDataAggregator.Command],
                                       urlNormalizer: ActorRef[UrlNormalizer.Command],
-                                      userCodeRunner: ActorRef[UserCodeRunner.Command],
                                       settings: CrawlerSettings,
                                       context: ActorContext[FetcherManager.CombinedCommand]) {
   import FetcherManager.*
@@ -130,7 +130,7 @@ private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimi
     //Spawn more Fetchers if needed:
     while fetchers.length < target do {
       val fetcher = context.spawnAnonymous(
-        Behaviors.supervise(Fetcher(crawlDepthLimiter, hostQueueRouter, urlNormalizer, userCodeRunner, settings))
+        Behaviors.supervise(Fetcher(crawlDepthLimiter, fetchResultConsumer, hostQueueRouter, urlNormalizer, settings))
           .onFailure(SupervisorStrategy.restart)
       )
 

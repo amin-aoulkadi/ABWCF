@@ -27,7 +27,7 @@ trait UserCode {
   /**
    * Executed when the crawler receives a successful HTTP response while fetching a page.
    *
-   * Limited API: This method is only suitable for very simple use cases. Use [[createUserCodeRunner]] for more advanced use cases.
+   * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
    *
    * This method is used by the [[UserCodeRunner]] actor.
    *
@@ -38,7 +38,7 @@ trait UserCode {
   /**
    * Executed when the crawler receives an HTTP redirection response while fetching a page.
    *
-   * Limited API: This method is only suitable for very simple use cases. Use [[createUserCodeRunner]] for more advanced use cases.
+   * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
    *
    * This method is used by the [[UserCodeRunner]] actor.
    *
@@ -49,7 +49,7 @@ trait UserCode {
   /**
    * Executed when the crawler receives an HTTP error response while fetching a page.
    *
-   * Limited API: This method is only suitable for very simple use cases. Use [[createUserCodeRunner]] for more advanced use cases.
+   * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
    *
    * This method is used by the [[UserCodeRunner]] actor.
    *
@@ -60,7 +60,7 @@ trait UserCode {
   /**
    * Executed when the crawler aborts fetching a page because the response body exceeds the maximum accepted content length.
    *
-   * Limited API: This method is only suitable for very simple use cases. Use [[createUserCodeRunner]] for more advanced use cases.
+   * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
    *
    * This method is used by the [[UserCodeRunner]] actor.
    *
@@ -69,13 +69,13 @@ trait UserCode {
   def onLengthLimitExceeded(page: Page, response: FetchResponse, context: ActorContext[?]): Unit = ()
 
   /**
-   * Creates a new user code runner.
+   * Creates a new fetch result consumer.
    *
-   * The default implementation returns the behavior of the default [[UserCodeRunner]].
+   * The default implementation creates a new [[UserCodeRunner]].
    *
-   * @note Implementations must always notify the relevant [[abwcf.actors.PageManager]] with a [[abwcf.actors.PageManager.SetStatus]] message after processing a [[UserCodeRunner.Command]]:
+   * @note Implementations must always notify the relevant [[abwcf.actors.PageManager]] with a [[abwcf.actors.PageManager.SetStatus]] message after processing a [[FetchResult.Command]]:
    *       {{{
-   *         override def createUserCodeRunner(settings: CrawlerSettings): Behavior[UserCodeRunner.Command] = Behaviors.setup(context => {
+   *         override def createFetchResultConsumer(settings: CrawlerSettings): Behavior[FetchResult.Command] = Behaviors.setup(context => {
    *           val sharding = ClusterSharding(context.system)
    *
    *           def notifyPageManager(page: Page): Unit = {
@@ -99,6 +99,6 @@ trait UserCode {
    *         })
    *       }}}
    */
-  def createUserCodeRunner(settings: CrawlerSettings): Behavior[UserCodeRunner.Command] =
+  def createFetchResultConsumer(settings: CrawlerSettings): Behavior[FetchResult.Command] =
     UserCodeRunner(settings)
 }

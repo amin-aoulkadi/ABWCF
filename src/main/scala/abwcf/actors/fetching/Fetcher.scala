@@ -3,7 +3,7 @@ package abwcf.actors.fetching
 import abwcf.actors.*
 import abwcf.data.{FetchResponse, Page, PageCandidate}
 import abwcf.metrics.FetcherMetrics
-import abwcf.util.{CrawlerSettings, HttpUtils}
+import abwcf.util.{CrawlerSettings, FetchResult, HttpUtils}
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
 import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
@@ -37,9 +37,9 @@ object Fetcher {
   private case class FutureFailure(throwable: Throwable) extends Command
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+            fetchResultConsumer: ActorRef[FetchResult.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command],
-            userCodeRunner: ActorRef[UserCodeRunner.Command],
             settings: CrawlerSettings): Behavior[Command] =
     Behaviors.setup(context => {
       Behaviors.withStash(5)(buffer => {
@@ -52,15 +52,15 @@ object Fetcher {
           "url-supplier"
         )
 
-        new Fetcher(crawlDepthLimiter, urlNormalizer, urlSupplier, userCodeRunner, http, materializer, settings, context, buffer).requestNextUrl()
+        new Fetcher(crawlDepthLimiter, fetchResultConsumer, urlNormalizer, urlSupplier, http, materializer, settings, context, buffer).requestNextUrl()
       })
     })
 }
 
 private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+                               fetchResultConsumer: ActorRef[FetchResult.Command],
                                urlNormalizer: ActorRef[UrlNormalizer.Command],
                                urlSupplier: ActorRef[UrlSupplier.Command],
-                               userCodeRunner: ActorRef[UserCodeRunner.Command],
                                http: HttpExt,
                                materializer: Materializer,
                                settings: CrawlerSettings,
@@ -115,7 +115,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
       //Discard the response entity and notify the UserCodeRunner:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
-      userCodeRunner ! UserCodeRunner.Error(page, response.status)
+      fetchResultConsumer ! FetchResult.Error(page, response.status)
 
       buffer.unstashAll(requestNextUrl())
 
@@ -127,7 +127,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       //Discard the response entity, notify the UserCodeRunner and send the redirect URL to the UrlNormalizer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = HttpUtils.getRedirectUrl(response, page.url)
-      userCodeRunner ! UserCodeRunner.Redirect(page, response.status, redirectTo)
+      fetchResultConsumer ! FetchResult.Redirect(page, response.status, redirectTo)
       redirectTo.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, page.crawlDepth))) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler. This also takes care of (shallow) redirect loops. Note that redirection does not increase the crawl depth.
 
       buffer.unstashAll(requestNextUrl())
@@ -163,12 +163,12 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
         crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(page, fetchResponse)
       }
 
-      userCodeRunner ! UserCodeRunner.Success(page, fetchResponse)
+      fetchResultConsumer ! FetchResult.Success(page, fetchResponse)
       buffer.unstashAll(requestNextUrl())
 
 		//Notify the UserCodeRunner if the response body exceeds the maximum accepted content length:
     case FutureFailure(_: EntityStreamSizeException) =>
-      userCodeRunner ! UserCodeRunner.LengthLimitExceeded(page, new FetchResponse(response, ByteString.empty))
+      fetchResultConsumer ! FetchResult.LengthLimitExceeded(page, new FetchResponse(response, ByteString.empty))
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>

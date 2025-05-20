@@ -78,10 +78,10 @@ object Crawler {
       "page-restorer"
     )
 
-    val userCodeRunner = context.spawn(
-      Behaviors.supervise(settings.userCode.createUserCodeRunner(settings))
+    val fetchResultConsumer = context.spawn(
+      Behaviors.supervise(settings.userCode.createFetchResultConsumer(settings))
         .onFailure(SupervisorStrategy.restart),
-      "user-code-runner"
+      "fetch-result-consumer"
     )
 
     val lenientRobotsFilter = context.spawn(
@@ -127,7 +127,7 @@ object Crawler {
     )
 
     val fetcherManager = context.spawn(
-      Behaviors.supervise(FetcherManager(crawlDepthLimiter, hostQueueRouter, urlNormalizer, userCodeRunner, settings))
+      Behaviors.supervise(FetcherManager(crawlDepthLimiter, fetchResultConsumer, hostQueueRouter, urlNormalizer, settings))
         .onFailure(SupervisorStrategy.restart),
       "fetcher-manager"
     )
