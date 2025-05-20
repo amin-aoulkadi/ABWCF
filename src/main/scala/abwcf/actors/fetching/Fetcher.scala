@@ -114,7 +114,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       context.log.info("Received {} for {}", response.status.toString, page.url)
       metrics.addResponse(response)
 
-      //Discard the response entity and notify the UserCodeRunner:
+      //Discard the response entity and notify the fetch result consumer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       fetchResultConsumer ! FetchResult.Error(page, response.status)
 
@@ -125,7 +125,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       context.log.info("Received {} for {}", response.status.toString, page.url)
       metrics.addResponse(response)
 
-      //Discard the response entity, notify the UserCodeRunner and send the redirect URL to the UrlNormalizer:
+      //Discard the response entity, notify the fetch result consumer and send the redirect URL to the UrlNormalizer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = HttpUtils.getRedirectUrl(response, page.url)
       fetchResultConsumer ! FetchResult.Redirect(page, response.status, redirectTo)
@@ -167,7 +167,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       fetchResultConsumer ! FetchResult.Success(page, fetchResponse)
       buffer.unstashAll(requestNextUrl())
 
-		//Notify the UserCodeRunner if the response body exceeds the maximum accepted content length:
+		//Notify the fetch result consumer if the response body exceeds the maximum accepted content length:
     case FutureFailure(_: EntityStreamSizeException) =>
       fetchResultConsumer ! FetchResult.LengthLimitExceeded(page, new FetchResponse(response, ByteString.empty))
       buffer.unstashAll(requestNextUrl())

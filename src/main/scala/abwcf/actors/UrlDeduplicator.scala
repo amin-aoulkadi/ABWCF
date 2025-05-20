@@ -24,7 +24,7 @@ object UrlDeduplicator {
 
   def apply(urlNormalizer: ActorRef[UrlNormalizer.Command], settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
     val config = context.system.settings.config
-    val maxCacheSize = config.getLong("abwcf.actors.deduplicator.max-cache-size")
+    val maxCacheSize = config.getLong("abwcf.actors.url-deduplicator.max-cache-size")
 
     val recentUrls = Caffeine.newBuilder() //Mutable state!
       .maximumSize(maxCacheSize)
