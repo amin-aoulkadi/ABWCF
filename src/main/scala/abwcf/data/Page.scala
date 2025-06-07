@@ -1,9 +1,5 @@
 package abwcf.data
 
-enum PageStatus {
-  case Disallowed, Discovered, Processed
-}
-
 /**
  * A page that is currently being crawled or has already been crawled.
  *
