@@ -43,7 +43,7 @@ object FetcherManager {
         )
 
         val fetcherMetricsAggregator = context.spawn(
-          Behaviors.supervise(FetcherMetricsAggregator(settings))
+          Behaviors.supervise(FetcherMetricsAggregator(Fetcher.getClass.getName, "abwcf.fetcher", settings))
             .onFailure(SupervisorStrategy.resume),
           "fetcher-metrics-aggregator"
         )

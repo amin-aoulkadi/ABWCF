@@ -80,7 +80,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     Behaviors.receiveMessage({
       case Fetch(page) =>
         context.log.info("Fetching {}", page.url)
-        fetcherMetricsAggregator ! FetcherMetricsAggregator.AddFetchedPages(1)
+        fetcherMetricsAggregator ! FetcherMetricsAggregator.AddRequests(1)
 
         //Send the HTTP request:
         val responseFuture = http.singleRequest(HttpRequest(uri = Uri(page.url))) //TODO: Set Accept header (e.g. "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")?

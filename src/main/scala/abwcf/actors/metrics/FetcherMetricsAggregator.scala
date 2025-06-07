@@ -8,17 +8,17 @@ import org.apache.pekko.http.scaladsl.model.HttpResponse
 
 object FetcherMetricsAggregator {
   sealed trait Command
-  case class AddFetchedPages(value: Long) extends Command
+  case class AddRequests(value: Long) extends Command
   case class AddResponse(response: HttpResponse) extends Command
   case class AddReceivedBytes(value: Long) extends Command
   case class AddException(exception: Throwable) extends Command
 
-  def apply(settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
-    val metrics = FetcherMetrics(settings, context)
+  def apply(instrumentationScopeName: String, prefix: String, settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
+    val metrics = FetcherMetrics(instrumentationScopeName, prefix, settings, context)
 
     Behaviors.receiveMessage({
-      case AddFetchedPages(value) =>
-        metrics.addFetchedPages(value)
+      case AddRequests(value) =>
+        metrics.addRequests(value)
         Behaviors.same
 
       case AddResponse(response) =>

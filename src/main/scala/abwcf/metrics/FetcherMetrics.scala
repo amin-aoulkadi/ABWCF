@@ -1,42 +1,37 @@
 package abwcf.metrics
 
-import abwcf.actors.fetching.Fetcher
 import abwcf.api.CrawlerSettings
 import org.apache.pekko.actor.typed.scaladsl.ActorContext
 import org.apache.pekko.http.scaladsl.model.HttpResponse
 
 object FetcherMetrics {
-  private val Prefix = "abwcf.fetcher"
-
-  def apply(settings: CrawlerSettings, context: ActorContext[?]): FetcherMetrics = {
-    new FetcherMetrics(settings, context)
+  def apply(instrumentationScopeName: String, prefix: String, settings: CrawlerSettings, context: ActorContext[?]): FetcherMetrics = {
+    new FetcherMetrics(instrumentationScopeName, prefix, settings, context)
   }
 }
 
-class FetcherMetrics private (settings: CrawlerSettings, context: ActorContext[?]) extends ActorMetrics(context) {
-  import FetcherMetrics.*
+class FetcherMetrics private (instrumentationScopeName: String, prefix: String, settings: CrawlerSettings, context: ActorContext[?]) extends ActorMetrics(context) {
+  private val meter = settings.openTelemetry.getMeter(instrumentationScopeName)
 
-  private val meter = settings.openTelemetry.getMeter(Fetcher.getClass.getName)
-
-  private val fetchedPagesCounter = meter.counterBuilder(s"$Prefix.fetched_pages")
-    .setDescription("The number of pages that have been fetched.")
+  private val requestCounter = meter.counterBuilder(s"$prefix.requests")
+    .setDescription("The number of requests that have been sent.")
     .build()
 
-  private val responseCounter = meter.counterBuilder(s"$Prefix.received_responses")
+  private val responseCounter = meter.counterBuilder(s"$prefix.responses")
     .setDescription("The number of responses that have been received (including responses whose response body was later discarded).")
     .build()
 
-  private val receivedBytesCounter = meter.counterBuilder(s"$Prefix.received_bytes")
+  private val receivedBytesCounter = meter.counterBuilder(s"$prefix.received_bytes")
     .setUnit("By") //Weird UCUM identifier for "byte".
     .setDescription("The number of response body bytes that have been received (excluding discarded response bodies).")
     .build()
 
-  private val exceptionsCounter = meter.counterBuilder(s"$Prefix.exceptions")
-    .setDescription("The number of exceptions thrown while fetching pages.")
+  private val exceptionsCounter = meter.counterBuilder(s"$prefix.exceptions")
+    .setDescription("The number of exceptions thrown while fetching resources.")
     .build()
 
-  def addFetchedPages(value: Long): Unit =
-    fetchedPagesCounter.add(value, actorAttributes)
+  def addRequests(value: Long): Unit =
+    requestCounter.add(value, actorAttributes)
 
   def addResponse(response: HttpResponse): Unit = {
     val attributes = actorAttributesBuilder

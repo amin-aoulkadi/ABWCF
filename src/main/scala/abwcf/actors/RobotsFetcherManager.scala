@@ -1,8 +1,9 @@
 package abwcf.actors
 
+import abwcf.actors.metrics.FetcherMetricsAggregator
 import abwcf.api.CrawlerSettings
 import abwcf.metrics.RobotsFetcherManagerMetrics
-import org.apache.pekko.actor.typed.Behavior
+import org.apache.pekko.actor.typed.{ActorRef, Behavior, SupervisorStrategy}
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 
 import scala.collection.mutable
@@ -20,11 +21,19 @@ object RobotsFetcherManager {
   private case object RobotsFetcherDone extends Command
 
   def apply(settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
-    new RobotsFetcherManager(settings, context).robotsFetcherManager()
+    val fetcherMetricsAggregator = context.spawn(
+      Behaviors.supervise(FetcherMetricsAggregator(RobotsFetcher.getClass.getName, "abwcf.robots_fetcher", settings))
+        .onFailure(SupervisorStrategy.resume),
+      "fetcher-metrics-aggregator"
+    )
+    
+    new RobotsFetcherManager(fetcherMetricsAggregator, settings, context).robotsFetcherManager()
   })
 }
 
-private class RobotsFetcherManager private (settings: CrawlerSettings, context: ActorContext[RobotsFetcherManager.Command]) {
+private class RobotsFetcherManager private (fetcherMetricsAggregator: ActorRef[FetcherMetricsAggregator.Command],
+                                            settings: CrawlerSettings,
+                                            context: ActorContext[RobotsFetcherManager.Command]) {
   import RobotsFetcherManager.*
 
   private val config = context.system.settings.config
@@ -58,7 +67,7 @@ private class RobotsFetcherManager private (settings: CrawlerSettings, context: 
   })
 
   private def spawnRobotsFetcher(schemeAndAuthority: String): Unit = {
-    val robotsFetcher = context.spawnAnonymous(RobotsFetcher(schemeAndAuthority))
+    val robotsFetcher = context.spawnAnonymous(RobotsFetcher(schemeAndAuthority, fetcherMetricsAggregator))
     context.watchWith(robotsFetcher, RobotsFetcherDone)
     activeFetchers += 1
     metrics.setFetchers(activeFetchers)
