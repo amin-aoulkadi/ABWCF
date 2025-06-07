@@ -29,13 +29,14 @@ object PageRestorer {
       val config = context.system.settings.config
       val initialDelay = config.getDuration("abwcf.actors.page-restorer.initial-delay").toScala
       val restoreDelay = config.getDuration("abwcf.actors.page-restorer.restore-delay").toScala
+      val chunkSize = config.getInt("abwcf.actors.page-restorer.chunk-size")
 
       //Periodically attempt to restore pages:
       timers.startTimerWithFixedDelay(RestorePages, initialDelay, restoreDelay)
 
       Behaviors.receiveMessage({
         case RestorePages =>
-          pagePersistenceManager ! PagePersistence.FindByStatus(PageStatus.Discovered, 100, context.self)
+          pagePersistenceManager ! PagePersistence.FindByStatus(PageStatus.Discovered, chunkSize, context.self)
           Behaviors.same
 
         case PagePersistence.ResultSeq(pages) =>

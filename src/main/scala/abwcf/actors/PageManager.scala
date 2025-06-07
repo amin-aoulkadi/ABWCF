@@ -72,7 +72,7 @@ private class PageManager private(pagePersistenceManager: ActorRef[PagePersisten
   private val receiveTimeout = config.getDuration("abwcf.actors.page-manager.passivation-receive-timeout").toScala
 
   private def recovering(url: String): Behavior[Command] = {
-    pagePersistenceManager ! PagePersistence.Recover(url)
+    pagePersistenceManager ! PagePersistence.Recover(url) //TODO: Inefficient if the RecoveryResult comes from the PageRestorer.
 
     Behaviors.receiveMessage({
       case RecoveryResult(None) =>
