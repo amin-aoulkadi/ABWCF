@@ -1,6 +1,7 @@
 package abwcf.actors.fetching
 
 import abwcf.actors.*
+import abwcf.actors.metrics.FetcherMetricsAggregator
 import abwcf.api.{CrawlerSettings, FetchResult}
 import abwcf.metrics.FetcherManagerMetrics
 import org.apache.pekko.Done
@@ -41,15 +42,22 @@ object FetcherManager {
           "management-data-aggregator"
         )
 
+        val fetcherMetricsAggregator = context.spawn(
+          Behaviors.supervise(FetcherMetricsAggregator(settings))
+            .onFailure(SupervisorStrategy.resume),
+          "fetcher-metrics-aggregator"
+        )
+
         //Periodically adjust the number of Fetchers:
         timers.startTimerWithFixedDelay(ScaleFetchers, initialDelay, managementDelay)
 
-        new FetcherManager(crawlDepthLimiter, fetchResultConsumer, hostQueueRouter, managementDataAggregator, urlNormalizer, settings, context).fetcherManager()
+        new FetcherManager(crawlDepthLimiter, fetcherMetricsAggregator, fetchResultConsumer, hostQueueRouter, managementDataAggregator, urlNormalizer, settings, context).fetcherManager()
       })
     }).narrow
 }
 
 private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
+                                      fetcherMetricsAggregator: ActorRef[FetcherMetricsAggregator.Command],
                                       fetchResultConsumer: ActorRef[FetchResult.Command],
                                       hostQueueRouter: ActorRef[HostQueue.Command],
                                       managementDataAggregator: ActorRef[ManagementDataAggregator.Command],
@@ -130,7 +138,7 @@ private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimi
     //Spawn more Fetchers if needed:
     while fetchers.length < target do {
       val fetcher = context.spawnAnonymous(
-        Behaviors.supervise(Fetcher(crawlDepthLimiter, fetchResultConsumer, hostQueueRouter, urlNormalizer, settings))
+        Behaviors.supervise(Fetcher(crawlDepthLimiter, fetcherMetricsAggregator, fetchResultConsumer, hostQueueRouter, urlNormalizer, settings))
           .onFailure(SupervisorStrategy.restart)
       )
 

@@ -5,8 +5,8 @@ import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
+import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpRequest, HttpResponse, Uri}
-import org.apache.pekko.http.scaladsl.{Http, HttpExt}
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.apache.pekko.util.ByteString
@@ -32,21 +32,19 @@ object RobotsFetcher {
   private case class FutureFailure(throwable: Throwable) extends Command
 
   def apply(schemeAndAuthority: String): Behavior[Command] = Behaviors.setup(context => {
-    val http = Http(context.system.toClassic)
-    val materializer = Materializer(context)
     val hostManager = ClusterSharding(context.system).entityRefFor(HostManager.TypeKey, schemeAndAuthority)
 
-    new RobotsFetcher(schemeAndAuthority, hostManager, http, materializer, context).sendRequest(schemeAndAuthority + "/robots.txt", 0)
+    new RobotsFetcher(schemeAndAuthority, hostManager, context).sendRequest(schemeAndAuthority + "/robots.txt", 0)
   })
 }
 
 private class RobotsFetcher private (schemeAndAuthority: String,
                                      hostManager: EntityRef[HostManager.Command],
-                                     http: HttpExt,
-                                     materializer: Materializer,
                                      context: ActorContext[RobotsFetcher.Command]) {
   import RobotsFetcher.*
 
+  private val http = Http(context.system.toClassic)
+  private val materializer = Materializer(context)
   private val config = context.system.settings.config
   private val maxContentLength = config.getBytes("abwcf.robots.fetching.max-content-length")
   private val bytesPerSec = config.getBytes("abwcf.robots.fetching.bandwidth-budget-per-file").toInt
