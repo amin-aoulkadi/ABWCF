@@ -1,9 +1,9 @@
 package abwcf.actors.fetching
 
 import abwcf.actors.*
-import abwcf.actors.metrics.FetcherMetricsAggregator
 import abwcf.api.{CrawlerSettings, FetchResult}
 import abwcf.data.{FetchResponse, Page, PageCandidate}
+import abwcf.metrics.FetcherMetrics
 import abwcf.util.HttpUtils
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors, StashBuffer}
@@ -38,7 +38,6 @@ object Fetcher {
   private case class FutureFailure(throwable: Throwable) extends Command
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
-            fetcherMetricsAggregator: ActorRef[FetcherMetricsAggregator.Command],
             fetchResultConsumer: ActorRef[FetchResult.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command],
@@ -51,13 +50,12 @@ object Fetcher {
           "url-supplier"
         )
 
-        new Fetcher(crawlDepthLimiter, fetcherMetricsAggregator, fetchResultConsumer, urlNormalizer, urlSupplier, settings, context, buffer).requestNextUrl()
+        new Fetcher(crawlDepthLimiter, fetchResultConsumer, urlNormalizer, urlSupplier, settings, context, buffer).requestNextUrl()
       })
     })
 }
 
 private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
-                               fetcherMetricsAggregator: ActorRef[FetcherMetricsAggregator.Command],
                                fetchResultConsumer: ActorRef[FetchResult.Command],
                                urlNormalizer: ActorRef[UrlNormalizer.Command],
                                urlSupplier: ActorRef[UrlSupplier.Command],
@@ -71,6 +69,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
   private val config = context.system.settings.config
   private val maxContentLength = config.getBytes("abwcf.fetching.max-content-length")
   private var bytesPerSec = config.getBytes("abwcf.fetching.min-bandwidth-budget-per-fetcher").toInt //Mutable state!
+  private val metrics = FetcherMetrics(Fetcher.getClass.getName, "abwcf.fetcher", settings, context)
 
   private def requestNextUrl(): Behavior[Command] = {
     //Request a URL from the UrlSupplier:
@@ -80,7 +79,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     Behaviors.receiveMessage({
       case Fetch(page) =>
         context.log.info("Fetching {}", page.url)
-        fetcherMetricsAggregator ! FetcherMetricsAggregator.AddRequests(1)
+        metrics.addRequests(1)
 
         //Send the HTTP request:
         val responseFuture = http.singleRequest(HttpRequest(uri = Uri(page.url))) //TODO: Set Accept header (e.g. "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")?
@@ -110,7 +109,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     //Handle 4xx and 5xx error responses:
     case FutureSuccess(response: HttpResponse) if response.status.isFailure =>
       context.log.info("Received {} for {}", response.status.toString, page.url)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddResponse(response)
+      metrics.addResponse(response)
 
       //Discard the response entity and notify the fetch result consumer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
@@ -121,7 +120,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     //Handle 3xx redirection responses:
     case FutureSuccess(response: HttpResponse) if response.status.isRedirection =>
       context.log.info("Received {} for {}", response.status.toString, page.url)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddResponse(response)
+      metrics.addResponse(response)
 
       //Discard the response entity, notify the fetch result consumer and send the redirect URL to the UrlNormalizer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
@@ -134,7 +133,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     //Handle other HTTP responses:
     case FutureSuccess(response: HttpResponse) =>
       context.log.info("Received {} for {}", response.status.toString, page.url)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddResponse(response)
+      metrics.addResponse(response)
       //TODO: What about responses that are not 200 OK?
       //TODO: Check if response.encoding needs to be handled (https://pekko.apache.org/docs/pekko-http/current/common/encoding.html#client-side).
 
@@ -155,7 +154,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
     //Send the complete response downstream after the response body has been received:
     case FutureSuccess(responseBody: ByteString) =>
       context.log.info("Received {} bytes ({}) for {}", responseBody.length, response.entity.contentType, page.url)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddReceivedBytes(responseBody.length)
+      metrics.addReceivedBytes(responseBody.length)
       val fetchResponse = new FetchResponse(response, responseBody)
 
       if (ParseableMediaTypes.contains(response.entity.contentType.mediaType)) { //Possible alternative: Use mediaType.binary or mediaType.isText.
@@ -172,7 +171,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
     case FutureFailure(throwable) =>
       context.log.error("Exception while fetching {}", page.url, throwable)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddException(throwable)
+      metrics.addException(throwable)
       buffer.unstashAll(requestNextUrl())
 
     case SetMaxBandwidth(maxBytesPerSec) =>

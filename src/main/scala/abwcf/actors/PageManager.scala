@@ -132,6 +132,7 @@ private class PageManager private(pagePersistenceManager: ActorRef[PagePersisten
   private def discoveredPage(page: Page): Behavior[Command] = {
     strictRobotsFilter ! StrictRobotsFilter.Filter(page) //Send the page downstream so that it can be fetched.
     context.setReceiveTimeout(receiveTimeout, Passivate) //Enable passivation.
+    //TODO: The PageManager can get stuck here if the page was ignored by the StrictRobotsFilter and passivation is prevented by periodic messages from the PageRestorer.
 
     Behaviors.receiveMessage({
       case SetStatus(status) =>

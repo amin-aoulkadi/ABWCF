@@ -1,8 +1,9 @@
 package abwcf.actors
 
-import abwcf.actors.metrics.FetcherMetricsAggregator
+import abwcf.api.CrawlerSettings
+import abwcf.metrics.FetcherMetrics
 import abwcf.util.HttpUtils
-import org.apache.pekko.actor.typed.{ActorRef, Behavior}
+import org.apache.pekko.actor.typed.Behavior
 import org.apache.pekko.actor.typed.scaladsl.adapter.TypedActorSystemOps
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
 import org.apache.pekko.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
@@ -32,16 +33,15 @@ object RobotsFetcher {
   private case class FutureSuccess(value: HttpResponse | ByteString) extends Command
   private case class FutureFailure(throwable: Throwable) extends Command
 
-  def apply(schemeAndAuthority: String, fetcherMetricsAggregator: ActorRef[FetcherMetricsAggregator.Command]): Behavior[Command] = Behaviors.setup(context => {
+  def apply(schemeAndAuthority: String, settings: CrawlerSettings): Behavior[Command] = Behaviors.setup(context => {
     val hostManager = ClusterSharding(context.system).entityRefFor(HostManager.TypeKey, schemeAndAuthority)
-
-    new RobotsFetcher(schemeAndAuthority, fetcherMetricsAggregator, hostManager, context).sendRequest(schemeAndAuthority + "/robots.txt", 0)
+    new RobotsFetcher(schemeAndAuthority, hostManager, settings, context).sendRequest(schemeAndAuthority + "/robots.txt", 0)
   })
 }
 
 private class RobotsFetcher private (schemeAndAuthority: String,
-                                     fetcherMetricsAggregator: ActorRef[FetcherMetricsAggregator.Command],
                                      hostManager: EntityRef[HostManager.Command],
+                                     settings: CrawlerSettings,
                                      context: ActorContext[RobotsFetcher.Command]) {
   import RobotsFetcher.*
 
@@ -51,10 +51,11 @@ private class RobotsFetcher private (schemeAndAuthority: String,
   private val maxContentLength = config.getBytes("abwcf.robots.fetching.max-content-length")
   private val bytesPerSec = config.getBytes("abwcf.robots.fetching.bandwidth-budget-per-file").toInt
   private val maxRedirects = config.getInt("abwcf.robots.fetching.max-redirects")
+  private val metrics = FetcherMetrics(RobotsFetcher.getClass.getName, "abwcf.robots_fetcher", settings, context)
 
   private def sendRequest(url: String, redirectCounter: Int): Behavior[Command] = {
     context.log.info("Fetching {}", url)
-    fetcherMetricsAggregator ! FetcherMetricsAggregator.AddRequests(1)
+    metrics.addRequests(1)
 
     //Send the HTTP request:
     val responseFuture = http.singleRequest(HttpRequest(uri = Uri(url)))
@@ -71,7 +72,7 @@ private class RobotsFetcher private (schemeAndAuthority: String,
     //Handle successful responses with the correct media type and encoding (as specified by RFC 9309):
     case FutureSuccess(response: HttpResponse) if response.status.isSuccess && !response.status.isRedirection && response.entity.contentType == ContentTypes.`text/plain(UTF-8)` =>
       context.log.info("Received {} for {}", response.status.toString, url)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddResponse(response)
+      metrics.addResponse(response)
 
       //Consume the response entity to receive the response body:
       val byteFuture = response.entity //Response entities must be consumed or discarded.
@@ -93,7 +94,7 @@ private class RobotsFetcher private (schemeAndAuthority: String,
     //Handle 3xx redirection responses:
     case FutureSuccess(response: HttpResponse) if response.status.isRedirection =>
       context.log.info("Received {} for {}", response.status.toString, url)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddResponse(response)
+      metrics.addResponse(response)
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
 
       //Follow the redirection:
@@ -109,7 +110,7 @@ private class RobotsFetcher private (schemeAndAuthority: String,
     //Handle 4xx error responses:
     case FutureSuccess(response: HttpResponse) if 400 to 499 contains response.status.intValue =>
       context.log.info("Received {} for {}", response.status.toString, url)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddResponse(response)
+      metrics.addResponse(response)
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       hostManager ! HostManager.Unavailable
       Behaviors.stopped
@@ -117,7 +118,7 @@ private class RobotsFetcher private (schemeAndAuthority: String,
     //Handle other HTTP responses:
     case FutureSuccess(response: HttpResponse) =>
       context.log.info("Received {} for {}", response.status.toString, url)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddResponse(response)
+      metrics.addResponse(response)
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       hostManager ! HostManager.Unreachable
       Behaviors.stopped
@@ -125,13 +126,13 @@ private class RobotsFetcher private (schemeAndAuthority: String,
     //Send the complete response to the HostManager after the response body has been received:
     case FutureSuccess(responseBody: ByteString) =>
       context.log.info("Received {} bytes for {}", responseBody.length, url)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddReceivedBytes(responseBody.length)
+      metrics.addReceivedBytes(responseBody.length)
       hostManager ! HostManager.Response(responseBody)
       Behaviors.stopped
 
     case FutureFailure(throwable) =>
       context.log.error("Exception while fetching {}", url, throwable)
-      fetcherMetricsAggregator ! FetcherMetricsAggregator.AddException(throwable)
+      metrics.addException(throwable)
       hostManager ! HostManager.Unreachable
       Behaviors.stopped
   })
