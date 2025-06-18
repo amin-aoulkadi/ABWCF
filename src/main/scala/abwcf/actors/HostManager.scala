@@ -44,7 +44,7 @@ object HostManager {
   case object Unreachable extends FetchResult
 
   sealed trait Reply
-  case class HostInfo(hostInfo: HostInformation) extends FetchResult
+  case class HostInfo(hostInfo: HostInformation) extends Reply
 
   def apply(entityContext: EntityContext[Command],
             hostPersistenceManager: ActorRef[HostPersistence.Command],
