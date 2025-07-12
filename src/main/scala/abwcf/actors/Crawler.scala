@@ -56,8 +56,8 @@ object Crawler {
     )
 
     val prioritizer = context.spawn(
-      Behaviors.supervise(Prioritizer(settings))
-        .onFailure(SupervisorStrategy.resume), //The Prioritizer is stateless, so resuming it is safe.
+      Behaviors.supervise(settings.userCode.createPrioritizer(settings))
+        .onFailure(SupervisorStrategy.restart),
       "prioritizer"
     )
 
