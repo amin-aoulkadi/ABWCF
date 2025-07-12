@@ -1,6 +1,6 @@
 package abwcf.actors.persistence.page
 
-import abwcf.actors.persistence.page.PagePersistence.{FindByStatus, Insert, Recover, UpdateStatus}
+import abwcf.actors.persistence.page.PagePersistence.{InsertCommand, ReadCommand, UpdateCommand}
 import abwcf.persistence.PageRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
@@ -19,20 +19,16 @@ object PagePersistenceManager {
     val pageUpdater = context.spawnAnonymous(PageUpdater(pageRepository))
 
     Behaviors.receiveMessage({
-      case Insert(page) =>
-        pageInserter ! Insert(page)
+      case command: InsertCommand =>
+        pageInserter ! command
         Behaviors.same
 
-      case UpdateStatus(url, status) =>
-        pageUpdater ! UpdateStatus(url, status)
+      case command: ReadCommand =>
+        pageReader ! command
         Behaviors.same
-
-      case Recover(url) =>
-        pageReader ! Recover(url)
-        Behaviors.same
-
-      case FindByStatus(status, limit, replyTo) =>
-        pageReader ! FindByStatus(status, limit, replyTo)
+        
+      case command: UpdateCommand =>
+        pageUpdater ! command
         Behaviors.same
     })
   })

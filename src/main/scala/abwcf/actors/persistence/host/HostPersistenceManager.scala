@@ -1,6 +1,6 @@
 package abwcf.actors.persistence.host
 
-import abwcf.actors.persistence.host.HostPersistence.{Insert, Recover, Update}
+import abwcf.actors.persistence.host.HostPersistence.{InsertCommand, ReadCommand, UpdateCommand}
 import abwcf.persistence.HostRepository
 import org.apache.pekko.actor.typed.scaladsl.Behaviors
 import org.apache.pekko.actor.typed.{ActorRef, Behavior}
@@ -19,16 +19,16 @@ object HostPersistenceManager {
     val hostUpdater = context.spawnAnonymous(HostUpdater(hostRepository))
 
     Behaviors.receiveMessage({
-      case Insert(hostInfo) =>
-        hostInserter ! Insert(hostInfo)
+      case command: InsertCommand =>
+        hostInserter ! command
         Behaviors.same
 
-      case Update(hostInfo) =>
-        hostUpdater ! Update(hostInfo)
+      case command: ReadCommand =>
+        hostReader ! command
         Behaviors.same
 
-      case Recover(schemeAndAuthority) =>
-        hostReader ! Recover(schemeAndAuthority)
+      case command: UpdateCommand =>
+        hostUpdater ! command
         Behaviors.same
     })
   })
