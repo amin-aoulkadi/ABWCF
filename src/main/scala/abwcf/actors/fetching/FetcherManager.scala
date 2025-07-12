@@ -1,7 +1,7 @@
 package abwcf.actors.fetching
 
 import abwcf.actors.*
-import abwcf.api.{CrawlerSettings, FetchResult}
+import abwcf.api.CrawlerSettings
 import abwcf.metrics.FetcherManagerMetrics
 import org.apache.pekko.Done
 import org.apache.pekko.actor.typed.scaladsl.{ActorContext, Behaviors}
@@ -25,7 +25,7 @@ object FetcherManager {
   private type CombinedCommand = Command | ManagementDataAggregator.Reply
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
-            fetchResultConsumer: ActorRef[FetchResult.Command],
+            fetchResultConsumer: ActorRef[FetchResultConsumer.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command],
             settings: CrawlerSettings): Behavior[Command] =
@@ -50,7 +50,7 @@ object FetcherManager {
 }
 
 private class FetcherManager private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
-                                      fetchResultConsumer: ActorRef[FetchResult.Command],
+                                      fetchResultConsumer: ActorRef[FetchResultConsumer.Command],
                                       hostQueueRouter: ActorRef[HostQueue.Command],
                                       managementDataAggregator: ActorRef[ManagementDataAggregator.Command],
                                       urlNormalizer: ActorRef[UrlNormalizer.Command],

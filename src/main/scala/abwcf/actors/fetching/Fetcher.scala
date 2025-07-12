@@ -1,7 +1,7 @@
 package abwcf.actors.fetching
 
 import abwcf.actors.*
-import abwcf.api.{CrawlerSettings, FetchResult}
+import abwcf.api.CrawlerSettings
 import abwcf.data.{FetchResponse, Page, PageCandidate}
 import abwcf.metrics.FetcherMetrics
 import abwcf.util.HttpUtils
@@ -38,7 +38,7 @@ object Fetcher {
   private case class FutureFailure(throwable: Throwable) extends Command
 
   def apply(crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
-            fetchResultConsumer: ActorRef[FetchResult.Command],
+            fetchResultConsumer: ActorRef[FetchResultConsumer.Command],
             hostQueueRouter: ActorRef[HostQueue.Command],
             urlNormalizer: ActorRef[UrlNormalizer.Command],
             settings: CrawlerSettings): Behavior[Command] =
@@ -56,7 +56,7 @@ object Fetcher {
 }
 
 private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Command],
-                               fetchResultConsumer: ActorRef[FetchResult.Command],
+                               fetchResultConsumer: ActorRef[FetchResultConsumer.Command],
                                urlNormalizer: ActorRef[UrlNormalizer.Command],
                                urlSupplier: ActorRef[UrlSupplier.Command],
                                settings: CrawlerSettings,
@@ -113,7 +113,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
 
       //Discard the response entity and notify the fetch result consumer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
-      fetchResultConsumer ! FetchResult.Error(page, response.status)
+      fetchResultConsumer ! FetchResultConsumer.Error(page, response.status)
 
       buffer.unstashAll(requestNextUrl())
 
@@ -125,7 +125,7 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
       //Discard the response entity, notify the fetch result consumer and send the redirect URL to the UrlNormalizer:
       response.discardEntityBytes(materializer) //Response entities must be consumed or discarded.
       val redirectTo = HttpUtils.getRedirectUrl(response, page.url)
-      fetchResultConsumer ! FetchResult.Redirect(page, response.status, redirectTo)
+      fetchResultConsumer ! FetchResultConsumer.Redirect(page, response.status, redirectTo)
       redirectTo.foreach(url => urlNormalizer ! UrlNormalizer.Normalize(PageCandidate(url, page.crawlDepth))) //The redirect URL should not be fetched immediately as it may already have been processed by the crawler. This also takes care of (shallow) redirect loops. Note that redirection does not increase the crawl depth.
 
       buffer.unstashAll(requestNextUrl())
@@ -161,12 +161,12 @@ private class Fetcher private (crawlDepthLimiter: ActorRef[CrawlDepthLimiter.Com
         crawlDepthLimiter ! CrawlDepthLimiter.CheckDepth(page, fetchResponse)
       }
 
-      fetchResultConsumer ! FetchResult.Success(page, fetchResponse)
+      fetchResultConsumer ! FetchResultConsumer.Success(page, fetchResponse)
       buffer.unstashAll(requestNextUrl())
 
 		//Notify the fetch result consumer if the response body exceeds the maximum accepted content length:
     case FutureFailure(_: EntityStreamSizeException) =>
-      fetchResultConsumer ! FetchResult.LengthLimitExceeded(page, new FetchResponse(response, ByteString.empty))
+      fetchResultConsumer ! FetchResultConsumer.LengthLimitExceeded(page, new FetchResponse(response, ByteString.empty))
       buffer.unstashAll(requestNextUrl())
 
     case FutureFailure(throwable) =>

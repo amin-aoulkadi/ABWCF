@@ -10,7 +10,7 @@ import org.apache.pekko.cluster.sharding.typed.scaladsl.ClusterSharding
  *
  * There should be one [[Prioritizer]] actor per node.
  *
- * This actor is stateless.
+ * This actor is stateless, but users may also implement stateful variants.
  */
 object Prioritizer {
   sealed trait Command

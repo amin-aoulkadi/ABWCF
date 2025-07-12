@@ -1,10 +1,7 @@
 package abwcf.api
 
 import abwcf.actors.{FetchResultConsumer, Prioritizer}
-import abwcf.data.{FetchResponse, Page}
 import org.apache.pekko.actor.typed.Behavior
-import org.apache.pekko.actor.typed.scaladsl.ActorContext
-import org.apache.pekko.http.scaladsl.model.StatusCode
 
 /**
  * API for providing user-defined code to the ABWCF.
@@ -12,50 +9,6 @@ import org.apache.pekko.http.scaladsl.model.StatusCode
  * '''All code provided via this API is executed by actors and therefore must not block.'''
  */
 trait UserCode {
-  /**
-   * Executed when the crawler receives a successful HTTP response while fetching a page.
-   *
-   * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
-   *
-   * This method is used by the [[FetchResultConsumer]] actor.
-   *
-   * The default implementation does nothing.
-   */
-  def onFetchSuccess(page: Page, response: FetchResponse, context: ActorContext[?]): Unit = ()
-
-  /**
-   * Executed when the crawler receives an HTTP redirection response while fetching a page.
-   *
-   * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
-   *
-   * This method is used by the [[FetchResultConsumer]] actor.
-   *
-   * The default implementation does nothing.
-   */
-  def onFetchRedirect(page: Page, statusCode: StatusCode, redirectTo: Option[String], context: ActorContext[?]): Unit = ()
-
-  /**
-   * Executed when the crawler receives an HTTP error response while fetching a page.
-   *
-   * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
-   *
-   * This method is used by the [[FetchResultConsumer]] actor.
-   *
-   * The default implementation does nothing.
-   */
-  def onFetchError(page: Page, statusCode: StatusCode, context: ActorContext[?]): Unit = ()
-
-  /**
-   * Executed when the crawler aborts fetching a page because the response body exceeds the maximum accepted content length.
-   *
-   * Limited API: This method is only suitable for very simple use cases. Use [[createFetchResultConsumer]] for more advanced use cases.
-   *
-   * This method is used by the [[FetchResultConsumer]] actor.
-   *
-   * The default implementation does nothing.
-   */
-  def onLengthLimitExceeded(page: Page, response: FetchResponse, context: ActorContext[?]): Unit = ()
-
   /**
    * Creates an actor that assigns crawl priorities to [[abwcf.data.PageCandidate]]s.
    *
@@ -69,7 +22,7 @@ trait UserCode {
    *           val sharding = ClusterSharding(context.system)
    *
    *           Behaviors.receiveMessage({
-   *             case Prioritizer.Prioritize(candidate) =>
+   *             case Prioritize(candidate) =>
    *               val priority = 123
    *               val pageManager = sharding.entityRefFor(PageManager.TypeKey, candidate.url)
    *               pageManager ! PageManager.SetPriority(priority)
@@ -84,11 +37,11 @@ trait UserCode {
   /**
    * Creates a new fetch result consumer.
    *
-   * The default implementation creates a new [[FetchResultConsumer]].
+   * The default implementation creates a new [[FetchResultConsumer]] that does nothing (except notify the [[abwcf.actors.PageManager]]).
    *
-   * @note Implementations must always notify the relevant [[abwcf.actors.PageManager]] with a [[abwcf.actors.PageManager.SetStatus]] message after processing a [[FetchResult.Command]]:
+   * @note Implementations must always notify the relevant [[abwcf.actors.PageManager]] with a [[abwcf.actors.PageManager.SetStatus]] message after processing a [[FetchResultConsumer.Command]]:
    *       {{{
-   *         override def createFetchResultConsumer(settings: CrawlerSettings): Behavior[FetchResult.Command] = Behaviors.setup(context => {
+   *         override def createFetchResultConsumer(settings: CrawlerSettings): Behavior[FetchResultConsumer.Command] = Behaviors.setup(context => {
    *           val sharding = ClusterSharding(context.system)
    *
    *           def notifyPageManager(page: Page): Unit = {
@@ -112,6 +65,6 @@ trait UserCode {
    *         })
    *       }}}
    */
-  def createFetchResultConsumer(settings: CrawlerSettings): Behavior[FetchResult.Command] =
-    FetchResultConsumer(settings)
+  def createFetchResultConsumer(settings: CrawlerSettings): Behavior[FetchResultConsumer.Command] =
+    FetchResultConsumer()
 }
