@@ -1,32 +1,19 @@
-package abwcf.actors
+package abwcf.services
 
-import abwcf.api.CrawlerSettings
-import abwcf.data.PageCandidate
-import com.typesafe.config.ConfigFactory
-import org.apache.pekko.actor.testkit.typed.scaladsl.{BehaviorTestKit, TestInbox}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.prop.Tables.Table
 
 //noinspection HttpUrlsUsage
-class UrlNormalizerSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
-  private val config = ConfigFactory.parseString(
-      """
-        abwcf.actors.url-normalizer.remove-userinfo = true
-        abwcf.actors.url-normalizer.remove-query = true
-        abwcf.actors.url-normalizer.remove-fragment = true
-        """)
-    .withFallback(BehaviorTestKit.ApplicationTestConfig)
-
-  private val inbox = TestInbox[UrlFilter.Command]()
-  private val testKit = BehaviorTestKit(UrlNormalizer(inbox.ref, CrawlerSettings()), "testkit", config)
+class UrlNormalizationServiceSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
+  val urlNormalizationService = new UrlNormalizationService(true, true, true)
 
   def test(input: String, expectedResult: String): Unit = {
-    testKit.run(UrlNormalizer.Normalize(PageCandidate(input, 0)))
-    inbox.expectMessage(UrlFilter.Filter(PageCandidate(expectedResult, 0)))
+    val result = urlNormalizationService.normalize(input)
+    assert(result.toString.equals(expectedResult))
   }
 
-  "UrlNormalizer" should "not change URLs that are already in normal form" in {
+  "UrlNormalizationService" should "not change URLs that are already in normal form" in {
     test("https://example.com/", "https://example.com/")
     test("https://example.com/abc/def/ghi", "https://example.com/abc/def/ghi")
   }
