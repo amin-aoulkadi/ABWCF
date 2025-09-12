@@ -1,6 +1,8 @@
 # Actor-Based Web Crawling Framework
 The ABWCF is a customizable, distributed and scalable web crawling framework for the JVM. It is based on [Apache Pekko](https://pekko.apache.org/) and the Actor model.
 
+The ABWCF was created and developed (up to and including commit [76b52d9](https://github.com/amin-aoulkadi/ABWCF/tree/76b52d91a131ba4f125efd9df178c77d454cc5a7)) as part of my master's thesis *Developing an Actor-Based Web Crawling Framework with Apache Pekko*.
+
 ## Features
 * __Web Crawling Basics:__ The ABWCF handles basic web crawling tasks (e.g. normalizing and deduplicating URLs, fetching resources, and parsing links from fetched HTML documents). Fetched resources are processed by user-defined code to perform use case-specific tasks.
 * __Polite Crawling:__ The ABWCF supports crawl delays, the Robots Exclusion Protocol (i.e. `robots.txt`), `X-Robots-Tag` HTTP headers, and `<meta name="robots">` HTML elements.
@@ -11,6 +13,10 @@ The ABWCF is a customizable, distributed and scalable web crawling framework for
 * __Horizontal Scalability:__ It is possible to distribute a single crawl across multiple concurrent ABWCF instances.
 * __Metrics:__ The ABWCF supports [OpenTelemetry](https://opentelemetry.io/) metrics.
 * __Extensibility:__ With some knowledge of ABWCF internals and Pekko, users can add new features or replace existing ABWCF components with custom implementations.
+
+## Limitations
+* The ABWCF does not render the pages it visits, and it does not execute any JavaScript.
+* The ABWCF does not support authentication (at least not out-of-the-box).
 
 ## License
 This work is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
