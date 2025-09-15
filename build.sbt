@@ -3,7 +3,7 @@ ThisBuild / scalaVersion := "3.3.4" //The Pekko documentation lists compatible S
 
 lazy val abwcf = (project in file("."))
   .settings(
-    name := "Actor-Based Web Crawling Framework"
+    name := "ABWCF"
   )
 
 val pekkoVersion = "1.1.3" //License: Apache-2.0
