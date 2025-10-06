@@ -10,7 +10,6 @@ on:
   push:
     branches:
       - main
-      - dependabot
 
 permissions:
   contents: write # Required to submit the dependency graph to GitHub.
