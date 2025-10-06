@@ -1,0 +1,15 @@
+name: Update Dependency Graph
+on:
+  push:
+    branches:
+      - dependabot
+jobs:
+  dependency-graph:
+    name: Update Dependency Graph
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: sbt/setup-sbt@v1
+      - uses: scalacenter/sbt-dependency-submission@v3
+permissions:
+  contents: write # Required to submit the dependency graph.
