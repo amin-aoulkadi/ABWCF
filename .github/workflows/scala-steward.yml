@@ -1,0 +1,21 @@
+#
+# Uses the Scala Steward GitHub Action to upgrade dependencies.
+#
+
+name: Scala Steward
+
+on:
+  workflow_dispatch: # Makes it possible to trigger the workflow manually.
+  schedule:
+    - cron: "0 0 * * SAT" # 00:00 on Saturdays
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  scala-steward:
+    name: Scala Steward
+    runs-on: ubuntu-latest
+    steps:
+      - uses: scala-steward-org/scala-steward-action@v2
