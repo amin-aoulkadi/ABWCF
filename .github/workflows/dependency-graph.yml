@@ -1,8 +1,20 @@
+#
+# Uses the sbt-dependency-submission GitHub Action to update the dependency graph on GitHub.
+#
+# This makes Dependabot alerts possible. However, Dependabot security updates and Dependabot version updates for these dependencies remain unavailable because Dependabot does not support sbt.
+#
+
 name: Update Dependency Graph
+
 on:
   push:
     branches:
+      - main
       - dependabot
+
+permissions:
+  contents: write # Required to submit the dependency graph.
+
 jobs:
   dependency-graph:
     name: Update Dependency Graph
@@ -11,5 +23,3 @@ jobs:
       - uses: actions/checkout@v5
       - uses: sbt/setup-sbt@v1
       - uses: scalacenter/sbt-dependency-submission@v3
-permissions:
-  contents: write # Required to submit the dependency graph.
