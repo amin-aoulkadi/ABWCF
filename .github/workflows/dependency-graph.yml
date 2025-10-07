@@ -1,7 +1,7 @@
 #
 # Uses the sbt-dependency-submission GitHub Action to update the dependency graph on GitHub.
 #
-# This makes Dependabot alerts possible. However, Dependabot security updates and Dependabot version updates for these dependencies remain unavailable because Dependabot does not support sbt.
+# This makes Dependabot alerts possible. However, Dependabot security updates and Dependabot version updates for sbt dependencies remain unavailable because Dependabot does not support sbt.
 #
 
 name: Update Dependency Graph
