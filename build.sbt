@@ -1,5 +1,5 @@
 ThisBuild / version := "1.0.0-SNAPSHOT"
-ThisBuild / scalaVersion := "3.3.6" //The Pekko documentation lists compatible Scala versions for each Pekko module.
+ThisBuild / scalaVersion := "3.3.7" //The Pekko documentation lists compatible Scala versions for each Pekko module.
 
 lazy val abwcf = (project in file("."))
   .settings(
