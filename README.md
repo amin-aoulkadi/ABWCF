@@ -18,11 +18,9 @@ The ABWCF was created and developed (up to and including commit [76b52d9](https:
 * The ABWCF does not render the pages it visits, and it does not execute any JavaScript.
 * The ABWCF does not support authentication (at least not out-of-the-box).
 
-## Getting Started
-Refer to the [Getting Started](https://github.com/amin-aoulkadi/ABWCF/wiki/Getting-Started) guide on the ABWCF Wiki for setup and usage instructions.
-
 ## Documentation
-The [ABWCF Wiki](https://github.com/amin-aoulkadi/ABWCF/wiki) provides documentation for users and developers.
+* [Wiki](https://github.com/amin-aoulkadi/ABWCF/wiki)
+* [Getting Started](https://github.com/amin-aoulkadi/ABWCF/wiki/Getting-Started)
 
 ## License
 This work is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
