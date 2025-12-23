@@ -94,7 +94,7 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
   /**
    * Parses a `<meta name="robots" content="...">` HTML element.
    *
-   * If the element has a `name` and a `content` attribute and if the value of the `name` attribute is equal to "robots" or one of the configured user agents, then the directives from the `content` attribute are parsed and collected.
+   * If the element has a `name` and a `content` attribute and if the value of the `name` attribute is equal to "robots" or one of the target user agents, then the directives from the `content` attribute are parsed and collected.
    *
    * This method can handle empty strings, empty `<meta>` elements, `<meta>` elements that lack the required attributes, and `<meta>` elements that have unrelated attributes.
    *
@@ -104,22 +104,18 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
    * @throws Exception if the [[exceptionHandler]] throws an exception
    */
   def parse(metaElement: String): Unit = {
-    val nameOption = getAttributeValue(NameRegex, metaElement)
-    val contentOption = getAttributeValue(ContentRegex, metaElement)
+    val shouldCollect = getAttributeValue(NameRegex, metaElement)
+      .map(_.trim.toLowerCase(Locale.ROOT)) //Normalizes the name.
+      .exists(name => name == "robots" || normalizedTargetUserAgents.contains(name))
 
-    (nameOption, contentOption) match {
-      case (Some(name), Some(content)) =>
-        val normalizedName = name.trim.toLowerCase(Locale.ROOT)
-
-        if (normalizedName == "robots" || normalizedTargetUserAgents.contains(normalizedName)) {
-          if (content.contains(':')) {
-            parseAmbiguousString(content)
-          } else {
-            parsedDirectives.addAll(UnambiguousStringParser.parse(content))
-          }
+    if (shouldCollect) {
+      getAttributeValue(ContentRegex, metaElement).foreach(content => {
+        if (content.contains(':')) {
+          parseAmbiguousString(content)
+        } else {
+          parsedDirectives.addAll(UnambiguousStringParser.parse(content))
         }
-
-      case _ => ()
+      })
     }
   }
 
