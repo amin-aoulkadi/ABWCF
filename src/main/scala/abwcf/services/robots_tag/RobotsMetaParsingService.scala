@@ -51,8 +51,9 @@ object RobotsMetaParsingService {
  *
  * This parser is not thread-safe.
  *
- * @param userAgents             The parser collects directives that apply to at least one of these user agents.
- *                               Directives that only apply to user agents that are not in this set are not collected.
+ * @param targetUserAgents       The target user agents.
+ *                               The parser collects directives that apply to a target user agent.
+ *                               Directives that only apply to non-target user agents are not collected.
  *                               Directives that apply to all user agents are always collected.
  * @param directiveParsersByName Lowercased and trimmed directive names mapped to [[DirectiveParser]]s that can parse the corresponding directives.
  *                               The default value is [[KnownDirectiveParsers.DefaultParsersByName]].
@@ -61,6 +62,8 @@ object RobotsMetaParsingService {
  *                               If this function throws the encountered exception, the parser stops parsing the current input.
  *                               If the exception is not thrown, the parser advances to the next known directive and continues to parse the rest of the current input.
  *                               The default value is [[ExceptionHandlers.ignoring]].
+ * @note Creating a new [[RobotsMetaParsingService]] instance incurs some overhead (normalizing user agents, compiling regular expressions).
+ *       It is therefore recommended to reuse existing parser instances (with [[reset]]) if possible.
  * @note There is no official standard or specification for `<meta name="robots">` elements.
  *       In some cases, their syntax is ambiguous, which makes parsing difficult.
  *       Different vendors may define and support different directives.
@@ -68,15 +71,15 @@ object RobotsMetaParsingService {
  *      - [[https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/meta/name/robots MDN: &lt;meta name=&quot;robots&quot;&gt;]]
  *      - [[https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag Google: Robots Meta Tags Specifications]]
  */
-class RobotsMetaParsingService(userAgents: Set[String] = Set.empty,
+class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
                                directiveParsersByName: Map[String, DirectiveParser[?]] = KnownDirectiveParsers.DefaultParsersByName,
                                exceptionHandler: ParserException => Unit = ExceptionHandlers.ignoring) {
   import RobotsMetaParsingService.*
 
   /**
-   * The user agents configured by the user, normalized.
+   * The target user agents configured by the user, normalized.
    */
-  private val normalizedUserAgents = userAgents.map(_.trim.toLowerCase(Locale.ROOT))
+  private val normalizedTargetUserAgents = ParserUtils.normalizeUserAgents(targetUserAgents)
 
   /**
    * All directives collected by the parser so far.
@@ -86,12 +89,7 @@ class RobotsMetaParsingService(userAgents: Set[String] = Set.empty,
   /**
    * A regular expression that matches all directive names known to the parser.
    */
-  private val knownDirectiveNamesRegex = Regex(
-    "(?i)" +
-      directiveParsersByName.keys //["foo-bar", "baz", ...]
-        .map(Regex.quote) //["\Qfoo-bar\E", "\Qbaz\E", ...]
-        .mkString("(?:", "|", ")") //"(?:\Qfoo-bar\E|\Qbaz\E|...)"
-  )
+  private val knownDirectiveNamesRegex = ParserUtils.regexForCollectionElements(directiveParsersByName.keys)
 
   /**
    * Parses a `<meta name="robots" content="...">` HTML element.
@@ -113,7 +111,7 @@ class RobotsMetaParsingService(userAgents: Set[String] = Set.empty,
       case (Some(name), Some(content)) =>
         val normalizedName = name.trim.toLowerCase(Locale.ROOT)
 
-        if (normalizedName == "robots" || normalizedUserAgents.contains(normalizedName)) {
+        if (normalizedName == "robots" || normalizedTargetUserAgents.contains(normalizedName)) {
           if (content.contains(':')) {
             parseAmbiguousString(content)
           } else {
@@ -137,7 +135,7 @@ class RobotsMetaParsingService(userAgents: Set[String] = Set.empty,
    * @throws Exception if the [[exceptionHandler]] throws an exception
    */
   private def parseAmbiguousString(content: String): Unit = {
-    var stringToParse = content.trim
+    var stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(content)
 
     while (stringToParse.nonEmpty) {
       val preprocessed = PreprocessedString(stringToParse)
@@ -158,12 +156,7 @@ class RobotsMetaParsingService(userAgents: Set[String] = Set.empty,
             parsedDirectives.add(parserResult.value)
 
             //Remove the parsed directive (including its value, if applicable) from the string:
-            stringToParse = parserResult.remainder.trim
-
-            //Remove any leading commas and whitespace characters from the string:
-            while (stringToParse.charAt(0) == ',') {
-              stringToParse = stringToParse.substring(1).trim
-            }
+            stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(parserResult.remainder)
           } catch {
             case e: Exception =>
               exceptionHandler.apply(ParserException(s"Failed to parse the first directive in \"$stringToParse\"", e))

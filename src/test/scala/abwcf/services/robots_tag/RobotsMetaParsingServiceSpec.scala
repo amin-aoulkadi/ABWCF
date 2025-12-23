@@ -1,10 +1,11 @@
 package abwcf.services.robots_tag
 
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.prop.TableDrivenPropertyChecks
 
 import java.time.LocalDate
 
-class RobotsMetaParsingServiceSpec extends AnyFlatSpec {
+class RobotsMetaParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
   private val Follow = Directive("follow")
   private val Index = Directive("index")
   private val MaxImagePreview = Directive("max-image-preview", "large")
@@ -98,20 +99,52 @@ class RobotsMetaParsingServiceSpec extends AnyFlatSpec {
     })
   }
 
+  it should "trim and lowercase directive names" in {
+    val parser = RobotsMetaParsingService()
+    parser.parse("""<meta name="robots" content=" Index, FOLLOW ">""")
+    assertResult(Set(Index, Follow))(parser.getDirectives)
+  }
+
   it should "eliminate duplicate directives" in {
     val parser = RobotsMetaParsingService()
 
+    //Unambiguous directive strings:
     parser.parse("""<meta name="robots" content="index, follow, index">""")
     assertResult(Set(Index, Follow))(parser.getDirectives)
 
     parser.parse("""<meta name="robots" content="follow">""")
     assertResult(Set(Index, Follow))(parser.getDirectives)
+    
+    //Ambiguous directive strings:
+    parser.reset()
+    parser.parse("""<meta name="robots" content="index, max-image-preview: large, index">""")
+    assertResult(Set(Index, MaxImagePreview))(parser.getDirectives)
+
+    parser.parse("""<meta name="robots" content="max-image-preview: large">""")
+    assertResult(Set(Index, MaxImagePreview))(parser.getDirectives)
   }
 
-  it should "trim and lowercase directive names" in {
-    val parser = RobotsMetaParsingService()
-    parser.parse("""<meta name="robots" content=" Index, FOLLOW ">""")
-    assertResult(Set(Index, Follow))(parser.getDirectives)
+  it should "work with input that contains excess commas" in {
+    val table = Table(
+      ("Input", "Expected Result"),
+      //No directives:
+      ("""<meta name="robots" content=",">""", Set.empty),
+      ("""<meta name="robots" content=",,,">""", Set.empty),
+      //Unambiguous directive strings:
+      ("""<meta name="robots" content="index,">""", Set(Index)),
+      ("""<meta name="robots" content=", index">""", Set(Index)),
+      ("""<meta name="robots" content="index, , follow,">""", Set(Index, Follow)),
+      //Ambiguous directive strings:
+      ("""<meta name="robots" content="max-image-preview: large,">""", Set(MaxImagePreview)),
+      ("""<meta name="robots" content=", max-image-preview: large">""", Set(MaxImagePreview)),
+      ("""<meta name="robots" content="max-image-preview: large, , unavailable_after: 2025-12-31,">""", Set(MaxImagePreview, UnavailableAfter))
+    )
+
+    forEvery(table)((input, expectedResult) => {
+      val parser = RobotsMetaParsingService()
+      parser.parse(input)
+      assertResult(expectedResult)(parser.getDirectives)
+    })
   }
 
   it should "work with different HTML attribute syntaxes" in {
@@ -178,19 +211,19 @@ class RobotsMetaParsingServiceSpec extends AnyFlatSpec {
     assertResult(Set(Index, Follow))(ignoringParser.getDirectives) //The "index" and "follow" directives were parsed because the exception handler ignored the exceptions.
   }
 
-  "RobotsMetaParsingService (without user agents)" should "collect directives that apply to all user agents" in {
+  "RobotsMetaParsingService (without target user agents)" should "collect directives that apply to all user agents" in {
     val parser = RobotsMetaParsingService()
     parser.parse("""<meta name="robots" content="index">""")
     assertResult(Set(Index))(parser.getDirectives)
   }
 
-  it should "ignore directives that only apply to specific user agents" in {
+  it should "not collect directives that only apply to specific user agents" in {
     val parser = RobotsMetaParsingService()
     parser.parse("""<meta name="TestBot" content="all">""")
     assert(parser.getDirectives.isEmpty)
   }
 
-  "RobotsMetaParsingService (with user agents)" should "collect directives that apply to all user agents" in {
+  "RobotsMetaParsingService (with target user agents)" should "collect directives that apply to all user agents" in {
     val parser = RobotsMetaParsingService(Set("TestBot1", "TestBot2"))
     parser.parse("""<meta name="robots" content="index">""")
     assertResult(Set(Index))(parser.getDirectives)
@@ -206,7 +239,7 @@ class RobotsMetaParsingServiceSpec extends AnyFlatSpec {
     assertResult(Set(Index, Follow))(parser.getDirectives)
   }
 
-  it should "ignore directives that only apply to other user agents" in {
+  it should "not collect directives that only apply to other user agents" in {
     val parser = RobotsMetaParsingService(Set("MyBot"))
     parser.parse("""<meta name="OtherBot" content="index">""")
     assert(parser.getDirectives.isEmpty)

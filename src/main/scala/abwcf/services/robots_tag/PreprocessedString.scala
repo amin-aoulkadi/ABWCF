@@ -3,7 +3,7 @@ package abwcf.services.robots_tag
 import java.util.Locale
 
 /**
- * Represents (part of) a string that is currently being processed by a [[RobotsMetaParsingService]], along with additional information that is required by [[DirectiveParser]] and [[RobotsMetaParsingService]] instances.
+ * Represents (part of) a string that is currently being processed by a [[RobotsMetaParsingService]] or a [[RobotsTagParsingService]], along with additional information that is required by various parsing components.
  *
  * @param string the string
  * @param firstToken The first token in the string (i.e. everything up to the first delimiter), all lowercase and trimmed. It can be ambiguous whether this token is a directive name or a user agent.
