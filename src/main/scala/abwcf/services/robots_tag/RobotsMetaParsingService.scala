@@ -7,42 +7,61 @@ import scala.collection.mutable
 import scala.util.matching.Regex
 
 object RobotsMetaParsingService {
-  /*
-  The regular expressions below are designed to retrieve the values of specific attributes from HTML elements.
-  The only difference between the regular expressions is the attribute name.
-
-  Things to consider:
-    - There is always at least one whitespace character before the attribute name.
-      The regular expressions must check for this whitespace character to avoid matching suffixes of a longer attribute names.
-    - Attribute names are case-insensitive.
-    - There may be whitespace characters around the equals sign that separates the attribute name from the attribute value.
-    - Attribute values can be double-quoted, single-quoted or unquoted.
-
-  Reference: https://html.spec.whatwg.org/multipage/syntax.html (→ 13.1.2.3 Attributes)
-   */
-
-  private val NameRegex = Regex("""(?i)\sname\s*=\s*("[^"]+"|'[^']+'|[^\s"'=<>`]+)""")
-  private val ContentRegex = Regex("""(?i)\scontent\s*=\s*("[^"]+"|'[^']+'|[^\s"'=<>`]+)""")
+  private val getNameFunction = createAttributeGetter("name")
+  private val getContentFunction = createAttributeGetter("content")
 
   /**
-   * Extracts the value of an attribute from an HTML element.
+   * Extracts the value of the `name` attribute from an HTML element.
    *
-   * @param attributeRegex A regular expression that matches the desired attribute. The first capturing group must contain the attribute value.
    * @param htmlElement the HTML element
-   * @return the value of the attribute, or [[None]] if the desired attribute is not present
+   * @return the value of the `name` attribute, or [[None]] if the `name` attribute is not present
    */
-  private def getAttributeValue(attributeRegex: Regex, htmlElement: String): Option[String] = {
-    attributeRegex.findFirstMatchIn(htmlElement)
-      .map(regexMatch => {
-        val value = regexMatch.group(1) //The group at index 0 contains the entire match. The first capturing group is at index 1.
-        val firstChar = value.charAt(0)
+  private def getNameAttribute(htmlElement: String): Option[String] =
+    getNameFunction.apply(htmlElement) //Because it compiles a regular expression, createAttributeGetter() is expensive. Implementing getNameAttribute() like this ensures that createAttributeGetter() is only invoked once.
 
-        if (firstChar == '"' || firstChar == '\'') {
-          value.substring(1, value.length - 1) //"'foo'" → "foo"
-        } else {
-          value
-        }
-      })
+  /**
+   * Extracts the value of the `content` attribute from an HTML element.
+   *
+   * @param htmlElement the HTML element
+   * @return the value of the `content` attribute, or [[None]] if the `content` attribute is not present
+   */
+  private def getContentAttribute(htmlElement: String): Option[String] =
+    getContentFunction.apply(htmlElement)
+
+  /**
+   * Returns a function that extracts the value of a desired attribute from an HTML element.
+   */
+  private def createAttributeGetter(attributeName: String): String => Option[String] = {
+    /**
+     * Matches the desired HTML attribute.
+     *
+     * The first capturing group contains the attribute value.
+     *
+     * Things to consider:
+     *   - There is always at least one whitespace character before the attribute name.
+     *     This regular expression checks for this whitespace character to avoid matching suffixes of longer attribute names.
+     *   - Attribute names are case-insensitive.
+     *   - There may be whitespace characters around the equals sign that separates the attribute name from the attribute value.
+     *   - Attribute values can be double-quoted, single-quoted or unquoted.
+     *
+     * @note This regular expression does not quote the attribute name (see [[Regex.quote]]), so it might not work with attribute names that contain regular expression metacharacters.
+     * @see [[https://html.spec.whatwg.org/multipage/syntax.html WHATWG: HTML Standard]] (→ 13.1.2.3 Attributes)
+     */
+    val attributeRegex = Regex("""(?i)\s""" + attributeName + """\s*=\s*("[^"]+"|'[^']+'|[^\s"'=<>`]+)""")
+
+    (htmlElement: String) => {
+      attributeRegex.findFirstMatchIn(htmlElement)
+        .map(regexMatch => {
+          val value = regexMatch.group(1) //The group at index 0 contains the entire match. The first capturing group is at index 1.
+          val firstChar = value.charAt(0)
+
+          if (firstChar == '"' || firstChar == '\'') {
+            value.substring(1, value.length - 1) //"'foo'" → "foo"
+          } else {
+            value
+          }
+        })
+    }
   }
 }
 
@@ -104,12 +123,12 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
    * @throws Exception if the [[exceptionHandler]] throws an exception
    */
   def parse(metaElement: String): Unit = {
-    val shouldCollect = getAttributeValue(NameRegex, metaElement)
+    val shouldCollect = getNameAttribute(metaElement)
       .map(_.trim.toLowerCase(Locale.ROOT)) //Normalizes the name.
       .exists(name => name == "robots" || normalizedTargetUserAgents.contains(name))
 
     if (shouldCollect) {
-      getAttributeValue(ContentRegex, metaElement).foreach(content => {
+      getContentAttribute(metaElement).foreach(content => {
         if (content.contains(':')) {
           parseAmbiguousString(content)
         } else {
