@@ -219,35 +219,35 @@ class RobotsMetaParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyC
 
   it should "not collect directives that only apply to specific user agents" in {
     val parser = RobotsMetaParsingService()
-    parser.parse("""<meta name="TestBot" content="all">""")
+    parser.parse("""<meta name="UnknownBot" content="all">""")
     assert(parser.getDirectives.isEmpty)
   }
 
   "RobotsMetaParsingService (with target user agents)" should "collect directives that apply to all user agents" in {
-    val parser = RobotsMetaParsingService(Set("TestBot1", "TestBot2"))
+    val parser = RobotsMetaParsingService(Set("MyBot-1", "MyBot-2"))
     parser.parse("""<meta name="robots" content="index">""")
     assertResult(Set(Index))(parser.getDirectives)
   }
 
   it should "collect directives that apply to the configured user agents" in {
-    val parser = RobotsMetaParsingService(Set("TestBot1", "TestBot2"))
+    val parser = RobotsMetaParsingService(Set("MyBot-1", "MyBot-2"))
 
-    parser.parse("""<meta name="TestBot1" content="index">""")
+    parser.parse("""<meta name="MyBot-1" content="index">""")
     assertResult(Set(Index))(parser.getDirectives)
 
-    parser.parse("""<meta name="TestBot2" content="follow">""")
+    parser.parse("""<meta name="MyBot-2" content="follow">""")
     assertResult(Set(Index, Follow))(parser.getDirectives)
   }
 
   it should "not collect directives that only apply to other user agents" in {
     val parser = RobotsMetaParsingService(Set("MyBot"))
-    parser.parse("""<meta name="OtherBot" content="index">""")
+    parser.parse("""<meta name="UnknownBot" content="index">""")
     assert(parser.getDirectives.isEmpty)
   }
 
   it should "perform case-insensitive user agent matching" in {
-    val parser = RobotsMetaParsingService(Set("TestBot"))
-    parser.parse("""<meta name="testbot" content="index">""")
+    val parser = RobotsMetaParsingService(Set("MyBot"))
+    parser.parse("""<meta name="mybot" content="index">""")
     assertResult(Set(Index))(parser.getDirectives)
   }
 }
