@@ -163,14 +163,12 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
   "RobotsTagParsingService (without target user agents)" should "collect directives that apply to all user agents" in {
     val inputs = Seq(
       "index",
-      "index, KnownBot: follow",
-      "index, KnownBot: follow, nocache",
       "index, UnknownBot: follow",
       "index, UnknownBot: follow, nocache"
     )
 
     inputs.foreach(input => {
-      val parser = RobotsTagParsingService(knownUserAgents = Set("KnownBot"))
+      val parser = RobotsTagParsingService()
       parser.parse(input)
       assertResult(Set(Index))(parser.getDirectives)
     })
@@ -178,14 +176,12 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
 
   it should "not collect directives that only apply to specific user agents" in {
     val inputs = Seq(
-      "KnownBot: index",
       "UnknownBot: index",
-      "KnownBot: index, UnknownBot: index",
-      "UnknownBot: index, KnownBot: index"
+      "UnknownBot-1: index, UnknownBot-2: index"
     )
 
     inputs.foreach(input => {
-      val parser = RobotsTagParsingService(knownUserAgents = Set("KnownBot"))
+      val parser = RobotsTagParsingService()
       parser.parse(input)
       assert(parser.getDirectives.isEmpty)
     })
@@ -194,13 +190,11 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
   "RobotsTagParsingService (with target user agents)" should "collect directives that apply to all user agents" in {
     val inputs = Seq(
       "index",
-      "index, KnownBot: follow",
-      "index, KnownBot: follow, nocache",
       "index, UnknownBot: follow",
       "index, UnknownBot: follow, nocache"
     )
 
-    val parser = RobotsTagParsingService(targetUserAgents = Set("MyBot-1", "MyBot-2"), knownUserAgents = Set("KnownBot"))
+    val parser = RobotsTagParsingService(Set("MyBot-1", "MyBot-2"))
 
     inputs.foreach(input => {
       parser.parse(input)
@@ -212,7 +206,7 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
   }
 
   it should "collect directives that apply to the configured user agents" in {
-    val parser = RobotsTagParsingService(targetUserAgents = Set("MyBot-1", "MyBot-2"), knownUserAgents = Set("KnownBot"))
+    val parser = RobotsTagParsingService(Set("MyBot-1", "MyBot-2"))
 
     parser.parse("MyBot-1: index")
     assertResult(Set(Index))(parser.getDirectives)
@@ -223,12 +217,8 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     val inputs = Seq(
       "MyBot-1: index, follow",
       "MyBot-1: index, MyBot-2: follow",
-      "KnownBot: nocache, MyBot-1: index, follow",
       "UnknownBot: nocache, MyBot-1: index, follow",
-      "MyBot-1: index, KnownBot: all, MyBot-2: follow, KnownBot: nocache",
-      "MyBot-1: index, UnknownBot: all, MyBot-2: follow, UnknownBot: nocache",
-      "MyBot-1: index, KnownBot: all, MyBot-2: follow, UnknownBot: nocache",
-      "MyBot-1: index, UnknownBot: all, MyBot-2: follow, KnownBot: nocache"
+      "MyBot-1: index, UnknownBot: all, MyBot-2: follow, UnknownBot: nocache"
     )
 
     inputs.foreach(input => {
@@ -240,25 +230,20 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
 
   it should "not collect directives that only apply to other user agents" in {
     val inputs = Seq(
-      "KnownBot: index",
       "UnknownBot: index",
-      "KnownBot: index, follow",
       "UnknownBot: index, follow",
-      "KnownBot: index, UnknownBot: index",
-      "UnknownBot: index, KnownBot: index",
-      "KnownBot: index, follow, UnknownBot: index, follow",
-      "UnknownBot: index, follow, KnownBot: index, follow"
+      "UnknownBot-1: index, UnknownBot-2: index",
+      "UnknownBot-1: index, follow, UnknownBot-2: index, follow"
     )
 
-    val parser = RobotsTagParsingService(targetUserAgents = Set("MyBot-1", "MyBot-2"), knownUserAgents = Set("KnownBot"))
+    val parser = RobotsTagParsingService(Set("MyBot-1", "MyBot-2"))
     inputs.foreach(parser.parse)
     assert(parser.getDirectives.isEmpty)
   }
 
   it should "perform case-insensitive user agent matching" in {
-    val parser = RobotsTagParsingService(targetUserAgents = Set("MyBot"), knownUserAgents = Set("KnownBot"))
+    val parser = RobotsTagParsingService(Set("MyBot"))
     parser.parse("mybot: index")
-    parser.parse("knownbot: follow")
     assertResult(Set(Index))(parser.getDirectives)
   }
 
@@ -266,18 +251,16 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     val table = Table(
       ("Input", "Expected Result"),
       ("MyBot:", Set.empty),
-      ("KnownBot:", Set.empty),
       ("UnknownBot:", Set.empty),
       ("index, MyBot:", Set(Index)),
-      ("index, KnownBot:", Set(Index)),
       ("index, UnknownBot:", Set(Index)),
       ("MyBot: MyBot: index", Set(Index)),
-      ("KnownBot: MyBot: index", Set(Index)),
+      ("MyBot: UnknownBot: index", Set.empty),
       ("UnknownBot: MyBot: index", Set(Index))
     )
 
     forEvery(table)((input, expectedResult) => {
-      val parser = RobotsTagParsingService(targetUserAgents = Set("MyBot"), knownUserAgents = Set("KnownBot"))
+      val parser = RobotsTagParsingService(Set("MyBot"))
       parser.parse(input)
       assertResult(expectedResult)(parser.getDirectives)
     })
@@ -289,14 +272,13 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     val table = Table(
       ("Input", "Expected Result"),
       ("max-image-preview: large, unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT, index, follow", Set(MaxImagePreview, unavailableAfter, Index, Follow)),
-      ("KnownBot: foo, MyBot: index, KnownBot: bar: 100, baz: 200, MyBot: max-image-preview: large, KnownBot: foo, bar, baz, MyBot: unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT", Set(Index, MaxImagePreview, unavailableAfter)),
       ("UnknownBot: foo, MyBot: index, UnknownBot: bar: 100, baz: 200, MyBot: max-image-preview: large, UnknownBot: foo, bar, baz, MyBot: unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT", Set(Index, MaxImagePreview, unavailableAfter)),
-      ("KnownBot: UnknownBot: MyBot: unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT, max-image-preview: large, index", Set(unavailableAfter, MaxImagePreview, Index)),
-      ("UnknownBot: KnownBot: MyBot: unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT, max-image-preview: large, index", Set(unavailableAfter, MaxImagePreview, Index))
+      ("UnknownBot: MyBot: unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT, max-image-preview: large, index", Set(unavailableAfter, MaxImagePreview, Index)),
+      ("index, foo: bar, max-image-preview: large, MyBot: follow", Set(Index, Follow))
     )
 
     forEvery(table)((input, expectedResult) => {
-      val parser = RobotsTagParsingService(targetUserAgents = Set("MyBot"), knownUserAgents = Set("KnownBot"))
+      val parser = RobotsTagParsingService(Set("MyBot"))
       parser.parse(input)
       assertResult(expectedResult)(parser.getDirectives)
     })

@@ -13,9 +13,6 @@ import scala.collection.mutable
  *                               The parser collects directives that apply to a target user agent.
  *                               Directives that only apply to non-target user agents are not collected.
  *                               Directives that apply to all user agents are always collected.
- * @param knownUserAgents        The set of known user agents.
- *                               This set may include both target and non-target user agents.
- *                               The default value is [[KnownUserAgents.DefaultUserAgents]].
  * @param directiveParsersByName Lowercased and trimmed directive names mapped to [[DirectiveParser]]s that can parse the corresponding directives.
  *                               The default value is [[KnownDirectiveParsers.DefaultParsersByName]].
  * @param exceptionHandler       The parser invokes this function when it encounters a [[ParserException]] while parsing.
@@ -33,18 +30,12 @@ import scala.collection.mutable
  *      - [[https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag Google: Robots Meta Tags Specifications]]
  */
 class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
-                              knownUserAgents: Set[String] = KnownUserAgents.DefaultUserAgents,
                               directiveParsersByName: Map[String, DirectiveParser[?]] = KnownDirectiveParsers.DefaultParsersByName,
                               exceptionHandler: ParserException => Unit = ExceptionHandlers.ignoring) {
   /**
    * The target user agents configured by the user, normalized.
    */
   private val normalizedTargetUserAgents = ParserUtils.normalizeUserAgents(targetUserAgents)
-
-  /**
-   * The known user agents, normalized.
-   */
-  private val normalizedKnownUserAgents = ParserUtils.normalizeUserAgents(knownUserAgents)
 
   /**
    * All directives collected by the parser so far.
@@ -54,12 +45,12 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
   /**
    * A regular expression that matches all directive names and user agents known to the parser.
    */
-  private val knownDirectiveNamesAndUserAgentsRegex = ParserUtils.regexForCollectionElements(directiveParsersByName.keys.concat(normalizedTargetUserAgents).concat(normalizedKnownUserAgents))
+  private val knownDirectiveNamesAndUserAgentsRegex = ParserUtils.regexForCollectionElements(directiveParsersByName.keys.concat(normalizedTargetUserAgents))
 
   /**
    * A regular expression that matches all user agents known to the parser.
    */
-  private val knownUserAgentsRegex = ParserUtils.regexForCollectionElements(normalizedTargetUserAgents.concat(normalizedKnownUserAgents))
+  private val knownUserAgentsRegex = ParserUtils.regexForCollectionElements(normalizedTargetUserAgents)
 
   def parse(robotsHeader: String): Unit = {
     if (robotsHeader.contains(':')) {
@@ -71,29 +62,16 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
 
   private def parseAmbiguousString(robotsHeader: String): Unit = {
     var stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(robotsHeader)
-    var shouldCollect = true
 
     while (stringToParse.nonEmpty) {
       val preprocessed = PreprocessedString(stringToParse)
-      var isUserAgent = false
 
-      //Check if the first token is a user agent:
-      if (preprocessed.delimiter.contains(':')) { //If the first delimiter is a colon, then the first token might be a user agent.
-        if (normalizedTargetUserAgents.contains(preprocessed.firstToken)) { //The first token is a target user agent.
-          shouldCollect = true
-          isUserAgent = true
-        } else if (normalizedKnownUserAgents.contains(preprocessed.firstToken)) { //The first token is a known non-target user agent.
-          shouldCollect = false
-          isUserAgent = true
-        }
-      }
-
-      if (isUserAgent) {
+      if (preprocessed.delimiter.contains(':') && normalizedTargetUserAgents.contains(preprocessed.firstToken)) { //The first token is a target user agent.
         //Remove the user agent from the string:
         stringToParse = preprocessed.tail
           .map(ParserUtils.removeUnnecessaryLeadingCharacters)
           .getOrElse("")
-      } else {
+      } else { //The first token is either a directive name or an unknown user agent.
         //Find a suitable DirectiveParser:
         val parserOption =
           if (preprocessed.delimiter.contains(':')) { //If the first delimiter is a colon, then the first token is either a key-value directive or an unknown user agent.
@@ -107,10 +85,7 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
             try {
               //Parse the first directive:
               val parserResult = parser.parse(preprocessed)
-
-              if (shouldCollect) { //Only collect directives if they apply to a target user agent or to all user agents.
-                parsedDirectives.add(parserResult.value)
-              }
+              parsedDirectives.add(parserResult.value)
 
               //Remove the parsed directive (including its value, if applicable) from the string:
               stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(parserResult.remainder)
