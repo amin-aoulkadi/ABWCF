@@ -4,8 +4,28 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import java.util.Locale
+import scala.util.matching.Regex
 
 class ParserUtilsSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
+  "dropUntilFirstMatch()" should "remove everything up to the first regex match" in {
+    val table = Table(
+      ("Input", "Expected Result"),
+      //Input with regex matches:
+      ("foo, bar", "bar"),
+      ("foo, bar, baz", "bar, baz"),
+      ("foo, bar, baz, bar, baz", "bar, baz, bar, baz"),
+      //Input without regex matches:
+      ("foo", ""),
+      ("foo, baz", "")
+    )
+
+    val regex = Regex("bar")
+
+    forEvery(table)((input, expectedResult) => {
+      assertResult(expectedResult)(ParserUtils.dropUntilFirstMatch(regex, PreprocessedString(input)))
+    })
+  }
+
   "findFirstComma()" should "find the index of the first comma" in {
     val table = Table(
       ("Input", "Expected Result"),

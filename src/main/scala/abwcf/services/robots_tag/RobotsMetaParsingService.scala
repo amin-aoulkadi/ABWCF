@@ -175,29 +175,13 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
           } catch {
             case e: Exception =>
               exceptionHandler.apply(ParserException(s"Failed to parse the first directive in \"$stringToParse\"", e))
-              stringToParse = dropUntilNextKnownDirective(preprocessed)
+              stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed)
           }
 
         case None =>
           exceptionHandler.apply(ParserException(s"Failed to find a suitable DirectiveParser for \"${preprocessed.firstToken}\""))
-          stringToParse = dropUntilNextKnownDirective(preprocessed)
+          stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed)
       }
-    }
-  }
-
-  /**
-   * Removes the first token and everything up to the next known directive from a string.
-   *
-   * When parsing a directive from an ambiguous directive string fails with an exception, the parser does not know where the problematic directive ends. This method allows the parser to find the next token (after the problematic directive) that is definitely a directive, so that the rest of the string can be parsed.
-   */
-  private def dropUntilNextKnownDirective(preprocessed: PreprocessedString): String = {
-    preprocessed.tail match {
-      case Some(tail) =>
-        knownDirectiveNamesRegex.findFirstMatchIn(tail)
-          .map(regexMatch => tail.substring(regexMatch.start))
-          .getOrElse("")
-
-      case None => ""
     }
   }
 

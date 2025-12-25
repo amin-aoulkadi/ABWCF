@@ -5,6 +5,22 @@ import scala.util.matching.Regex
 
 object ParserUtils {
   /**
+   * Removes the first token and everything up to the first regular expression match from a [[PreprocessedString]].
+   * 
+   * Returns an empty string if the regular expression finds no match.
+   */
+  def dropUntilFirstMatch(regex: Regex, preprocessed: PreprocessedString): String = {
+    preprocessed.tail match {
+      case Some(tail) =>
+        regex.findFirstMatchIn(tail)
+          .map(regexMatch => tail.substring(regexMatch.start))
+          .getOrElse("")
+
+      case None => ""
+    }
+  }
+  
+  /**
    * Returns the index of the first comma in a string, or `string.length` if the string contains no commas.
    */
   def findFirstComma(string: String): Int = {

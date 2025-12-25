@@ -92,42 +92,14 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
             } catch {
               case e: Exception =>
                 exceptionHandler.apply(ParserException(s"Failed to parse the first directive in \"$stringToParse\"", e))
-                stringToParse = dropUntilNextKnownToken(preprocessed) //The first token is definitely a directive.
+                stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesAndUserAgentsRegex, preprocessed) //The first token is definitely a directive.
             }
 
           case None =>
             exceptionHandler.apply(ParserException(s"Failed to parse unknown token \"${preprocessed.firstToken}\". Is it a directive name or a user agent?"))
-            stringToParse = dropUntilNextKnownUserAgent(preprocessed) //The first token is either an unknown directive name or an unknown user agent.
+            stringToParse = ParserUtils.dropUntilFirstMatch(knownUserAgentsRegex, preprocessed) //The first token is either an unknown directive name or an unknown user agent.
         }
       }
-    }
-  }
-
-  /**
-   * Removes the first token and everything up to the next known directive name or user agent from a string.
-   */
-  private def dropUntilNextKnownToken(preprocessed: PreprocessedString): String = {
-    preprocessed.tail match {
-      case Some(tail) =>
-        knownDirectiveNamesAndUserAgentsRegex.findFirstMatchIn(tail)
-          .map(regexMatch => tail.substring(regexMatch.start))
-          .getOrElse("")
-
-      case None => ""
-    }
-  }
-
-  /**
-   * Removes the first token and everything up to the next known user agent from a string.
-   */
-  private def dropUntilNextKnownUserAgent(preprocessed: PreprocessedString): String = {
-    preprocessed.tail match {
-      case Some(tail) =>
-        knownUserAgentsRegex.findFirstMatchIn(tail)
-          .map(regexMatch => tail.substring(regexMatch.start))
-          .getOrElse("")
-
-      case None => ""
     }
   }
 
