@@ -141,11 +141,11 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
   /**
    * Parses an ambiguous directive string.
    *
-   * A directive string is ambiguous if it contains at least one colon. In `<meta name="robots">` elements, a colon indicates a key-value directive. But there are two problems:
+   * A directive string is ambiguous if it contains at least one colon. In `<meta name="robots">` elements, a colon indicates a key-value directive. There are two problems:
    *  - Some directive values contain unescaped commas, which are indistinguishable from commas that separate directives.
-   *  - Some directive values contain unescaped colons, which are indistinguishable from colons that separate keys from values.
+   *  - Some directive values contain unescaped colons, which are indistinguishable from colons that separate directive names from directive values.
    *
-   * An ambiguous string can therefore not be treated as a string of comma-separated directives. Instead, it has to be parsed directive by directive.
+   * An ambiguous string can not be treated as a string of comma-separated directives. Instead, it has to be parsed directive by directive.
    *
    * @throws Exception if the [[exceptionHandler]] throws an exception
    */
@@ -175,19 +175,25 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
           } catch {
             case e: Exception =>
               exceptionHandler.apply(ParserException(s"Failed to parse the first directive in \"$stringToParse\"", e))
-              stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed)
+              stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed) //The first token is a directive name. It is unclear where this directive ends, so skipping to the next known directive name is the only safe option.
           }
 
         case None =>
           exceptionHandler.apply(ParserException(s"Failed to find a suitable DirectiveParser for \"${preprocessed.firstToken}\""))
-          stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed)
+          stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed) //The first token is an unknown key-value directive name. It is unclear where this directive ends, so skipping to the next known directive name is the only safe option.
       }
     }
   }
 
+  /**
+   * Returns all directives that have been collected so far.
+   */
   def getDirectives: Set[Directive[?]] =
     Set.from(parsedDirectives) //Creates an immutable copy.
 
+  /**
+   * Clears the set of collected directives.
+   */
   def reset(): Unit =
     parsedDirectives.clear()
 }

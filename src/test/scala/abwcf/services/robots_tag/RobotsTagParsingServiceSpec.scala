@@ -205,7 +205,7 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     assert(parser.getDirectives.contains(Index))
   }
 
-  it should "collect directives that apply to the configured user agents" in {
+  it should "collect directives that apply to the target user agents" in {
     val parser = RobotsTagParsingService(Set("MyBot-1", "MyBot-2"))
 
     parser.parse("MyBot-1: index")

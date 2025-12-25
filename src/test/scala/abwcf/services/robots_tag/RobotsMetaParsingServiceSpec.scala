@@ -229,7 +229,7 @@ class RobotsMetaParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyC
     assertResult(Set(Index))(parser.getDirectives)
   }
 
-  it should "collect directives that apply to the configured user agents" in {
+  it should "collect directives that apply to the target user agents" in {
     val parser = RobotsMetaParsingService(Set("MyBot-1", "MyBot-2"))
 
     parser.parse("""<meta name="MyBot-1" content="index">""")

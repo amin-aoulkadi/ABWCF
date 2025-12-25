@@ -52,6 +52,16 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
    */
   private val knownUserAgentsRegex = ParserUtils.regexForCollectionElements(normalizedTargetUserAgents)
 
+  /**
+   * Parses an `X-Robots-Tag` HTTP response header.
+   *
+   * This method can handle empty strings.
+   *
+   * Nothing is done to ensure that the input is an `X-Robots-Tag` header.
+   *
+   * @param robotsHeader a single `X-Robots-Tag` header (without the "X-Robots-Tag:" prefix)
+   * @throws Exception if the [[exceptionHandler]] throws an exception
+   */
   def parse(robotsHeader: String): Unit = {
     if (robotsHeader.contains(':')) {
       parseAmbiguousString(robotsHeader)
@@ -60,6 +70,18 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
     }
   }
 
+  /**
+   * Parses an ambiguous directive string.
+   *
+   * A directive string is ambiguous if it contains at least one colon. In `X-Robots-Tag` headers, a colon indicates a user agent group or a key-value directive. There are three problems:
+   *  - Colons that separate user agents from directives are indistinguishable from colons that separate directive names from directive values.
+   *  - Some directive values contain unescaped commas, which are indistinguishable from commas that separate directives.
+   *  - Some directive values contain unescaped colons, which are indistinguishable from colons that separate directive names from directive values.
+   *
+   * An ambiguous string can not be treated as a string of comma-separated directives. Instead, it has to be parsed token by token.
+   * 
+   * @throws Exception if the [[exceptionHandler]] throws an exception
+   */
   private def parseAmbiguousString(robotsHeader: String): Unit = {
     var stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(robotsHeader)
 
@@ -92,20 +114,26 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
             } catch {
               case e: Exception =>
                 exceptionHandler.apply(ParserException(s"Failed to parse the first directive in \"$stringToParse\"", e))
-                stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesAndUserAgentsRegex, preprocessed) //The first token is definitely a directive.
+                stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesAndUserAgentsRegex, preprocessed) //The first token is a directive name. FIXME: "<known directive name>: <invalid value>, UnknownBot: <known directive name>"
             }
 
           case None =>
             exceptionHandler.apply(ParserException(s"Failed to parse unknown token \"${preprocessed.firstToken}\". Is it a directive name or a user agent?"))
-            stringToParse = ParserUtils.dropUntilFirstMatch(knownUserAgentsRegex, preprocessed) //The first token is either an unknown directive name or an unknown user agent.
+            stringToParse = ParserUtils.dropUntilFirstMatch(knownUserAgentsRegex, preprocessed) //The first token is either an unknown key-value directive name or an unknown user agent. Skipping to the next known directive name risks collecting directives that only apply to an unknown user agent. As such, skipping to the next known user agent is the only safe option.
         }
       }
     }
   }
 
+  /**
+   * Returns all directives that have been collected so far.
+   */
   def getDirectives: Set[Directive[?]] =
     Set.from(parsedDirectives) //Creates an immutable copy.
 
+  /**
+   * Clears the set of collected directives.
+   */
   def reset(): Unit =
     parsedDirectives.clear()
 }
