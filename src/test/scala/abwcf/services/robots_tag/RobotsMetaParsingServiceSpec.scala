@@ -81,24 +81,6 @@ class RobotsMetaParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyC
     })
   }
 
-  it should "never parse unknown key-value directives" in {
-    val inputs = Seq(
-      """<meta name="robots" content="foo: bar baz">""", //This directive string is unambiguous and could technically be parsed as a Directive[String].
-      //Ambiguous directive strings:
-      """<meta name="robots" content="foo: bar baz, follow">""", //First
-      """<meta name="robots" content="index, foo: bar baz, follow">""", //Middle
-      """<meta name="robots" content="index, foo: bar baz">""", //Last
-    )
-
-    val unexpectedDirective = Directive("foo", "bar baz")
-
-    inputs.foreach(input => {
-      val parser = RobotsMetaParsingService()
-      parser.parse(input)
-      assert(!parser.getDirectives.contains(unexpectedDirective))
-    })
-  }
-
   it should "trim and lowercase directive names" in {
     val parser = RobotsMetaParsingService()
     parser.parse("""<meta name="robots" content=" Index, FOLLOW ">""")
@@ -114,7 +96,7 @@ class RobotsMetaParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyC
 
     parser.parse("""<meta name="robots" content="follow">""")
     assertResult(Set(Index, Follow))(parser.getDirectives)
-    
+
     //Ambiguous directive strings:
     parser.reset()
     parser.parse("""<meta name="robots" content="index, max-image-preview: large, index">""")
@@ -190,25 +172,37 @@ class RobotsMetaParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyC
     assertResult(Set(Index, Follow), parser.getDirectives)
   }
 
-  it should "handle exceptions as configured" in {
+  it should "throw exceptions if configured to do so" in {
     val inputs = Seq(
-      """<meta name="robots" content="foo: bar, index">""", //There is no suitable DirectiveParser for "foo" key-value directives.
-      """<meta name="robots" content="max-snippet: baz, FOLLOW">""" //There is a suitable DirectiveParser for "max-snippet" key-value directives, but "baz" is an invalid value. The "follow" directive is parsable, but not normalized.
+      """<meta name="robots" content="foo: bar, index">""", //"foo" is an unknown key-value directive name.
+      """<meta name="robots" content="max-snippet: <invalid value>, follow">"""
     )
 
-    //Throw exceptions:
-    val throwingParser = RobotsMetaParsingService(exceptionHandler = ExceptionHandlers.throwing)
+    val parser = RobotsMetaParsingService(exceptionHandler = ExceptionHandlers.throwing)
 
     inputs.foreach(input => {
-      assertThrows[ParserException](throwingParser.parse(input))
+      assertThrows[ParserException](parser.parse(input))
     })
 
-    assert(throwingParser.getDirectives.isEmpty) //The "index" and "follow" directives were not parsed because the exception handler threw the exceptions.
+    assert(parser.getDirectives.isEmpty) //The "index" and "follow" directives were not parsed because the exception handler threw the exceptions.
+  }
 
-    //Ignore exceptions:
-    val ignoringParser = RobotsMetaParsingService(exceptionHandler = ExceptionHandlers.ignoring)
-    inputs.foreach(ignoringParser.parse)
-    assertResult(Set(Index, Follow))(ignoringParser.getDirectives) //The "index" and "follow" directives were parsed because the exception handler ignored the exceptions.
+  it should "recover from parsing failures" in {
+    val table = Table(
+      ("Input", "Expected Result"),
+      //The first token is part of an unknown key-value directive (skip to the next known directive name):
+      ("""<meta name="robots" content="foo: bar, index">""", Set(Index)),
+      ("""<meta name="robots" content="foo: bar, max-image-preview: large">""", Set(MaxImagePreview)),
+      //A DirectiveParser throws (skip to the next known directive name):
+      ("""<meta name="robots" content="max-snippet: <invalid value>, index">""", Set(Index)),
+      ("""<meta name="robots" content="max-snippet: <invalid value>, max-image-preview: large">""", Set(MaxImagePreview))
+    )
+
+    forEvery(table)((input, expectedResult) => {
+      val parser = RobotsMetaParsingService()
+      parser.parse(input)
+      assertResult(expectedResult)(parser.getDirectives)
+    })
   }
 
   "RobotsMetaParsingService (without target user agents)" should "collect directives that apply to all user agents" in {

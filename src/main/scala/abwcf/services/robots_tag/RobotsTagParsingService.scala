@@ -43,9 +43,9 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
   private val parsedDirectives = mutable.Set.empty[Directive[?]]
 
   /**
-   * A regular expression that matches all directive names and user agents known to the parser.
+   * A regular expression that matches all directive names known to the parser.
    */
-  private val knownDirectiveNamesAndUserAgentsRegex = ParserUtils.regexForCollectionElements(directiveParsersByName.keys.concat(normalizedTargetUserAgents))
+  private val knownDirectiveNamesRegex = ParserUtils.regexForCollectionElements(directiveParsersByName.keys)
 
   /**
    * A regular expression that matches all user agents known to the parser.
@@ -79,7 +79,7 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
    *  - Some directive values contain unescaped colons, which are indistinguishable from colons that separate directive names from directive values.
    *
    * An ambiguous string can not be treated as a string of comma-separated directives. Instead, it has to be parsed token by token.
-   * 
+   *
    * @throws Exception if the [[exceptionHandler]] throws an exception
    */
   private def parseAmbiguousString(robotsHeader: String): Unit = {
@@ -112,14 +112,28 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
               //Remove the parsed directive (including its value, if applicable) from the string:
               stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(parserResult.remainder)
             } catch {
-              case e: Exception =>
+              case e: Exception => //The first token is a directive name.
                 exceptionHandler.apply(ParserException(s"Failed to parse the first directive in \"$stringToParse\"", e))
-                stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesAndUserAgentsRegex, preprocessed) //The first token is a directive name. FIXME: "<known directive name>: <invalid value>, UnknownBot: <known directive name>"
+
+                stringToParse = preprocessed.tail match {
+                  case Some(tail) =>
+                    val colonIndex = tail.indexOf(':')
+
+                    knownDirectiveNamesRegex.findFirstMatchIn(tail) match {
+                      case Some(regexMatch) if regexMatch.start < colonIndex || colonIndex == -1 =>
+                        tail.substring(regexMatch.start) //Skipping to the next known directive name is safe as long as no colons are skipped over.
+
+                      case _ => //Either there is no next known directive name, or the next known directive name comes after a colon. That colon could indicate a user agent group, so ...
+                        ParserUtils.dropUntilFirstMatch(knownUserAgentsRegex, preprocessed) //... skipping to the next known user agent is the only safe option.
+                    }
+
+                  case None => ""
+                }
             }
 
-          case None =>
+          case None => //The first token is either an unknown key-value directive name or an unknown user agent.
             exceptionHandler.apply(ParserException(s"Failed to parse unknown token \"${preprocessed.firstToken}\". Is it a directive name or a user agent?"))
-            stringToParse = ParserUtils.dropUntilFirstMatch(knownUserAgentsRegex, preprocessed) //The first token is either an unknown key-value directive name or an unknown user agent. Skipping to the next known directive name risks collecting directives that only apply to an unknown user agent. As such, skipping to the next known user agent is the only safe option.
+            stringToParse = ParserUtils.dropUntilFirstMatch(knownUserAgentsRegex, preprocessed) //The first token could be an unknown user agent, so skipping to the next known directive name risks collecting directives that only apply to an unknown user agent. As such, skipping to the next known user agent is the only safe option.
         }
       }
     }

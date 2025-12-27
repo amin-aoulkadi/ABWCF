@@ -173,14 +173,14 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
             //Remove the parsed directive (including its value, if applicable) from the string:
             stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(parserResult.remainder)
           } catch {
-            case e: Exception =>
+            case e: Exception => //The first token is a directive name.
               exceptionHandler.apply(ParserException(s"Failed to parse the first directive in \"$stringToParse\"", e))
-              stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed) //The first token is a directive name. It is unclear where this directive ends, so skipping to the next known directive name is the only safe option.
+              stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed) //It is unclear where the first directive ends, so skipping to the next known directive name is the only safe option.
           }
 
-        case None =>
+        case None => //The first token is an unknown key-value directive name.
           exceptionHandler.apply(ParserException(s"Failed to find a suitable DirectiveParser for \"${preprocessed.firstToken}\""))
-          stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed) //The first token is an unknown key-value directive name. It is unclear where this directive ends, so skipping to the next known directive name is the only safe option.
+          stringToParse = ParserUtils.dropUntilFirstMatch(knownDirectiveNamesRegex, preprocessed) //It is unclear where the first directive ends, so skipping to the next known directive name is the only safe option.
       }
     }
   }
