@@ -103,7 +103,7 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
   /**
    * All directives collected by the parser so far.
    */
-  private val parsedDirectives = mutable.Set.empty[Directive[?]]
+  private val collectedDirectives = mutable.Set.empty[Directive[?]]
 
   /**
    * A regular expression that matches all directive names known to the parser.
@@ -132,7 +132,7 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
         if (content.contains(':')) {
           parseAmbiguousString(content)
         } else {
-          parsedDirectives.addAll(UnambiguousStringParser.parse(content))
+          collectedDirectives.addAll(UnambiguousStringParser.parse(content))
         }
       })
     }
@@ -166,9 +166,9 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
       parserOption match {
         case Some(parser) =>
           try {
-            //Parse the first directive:
+            //Parse and collect the first directive:
             val parserResult = parser.parse(preprocessed)
-            parsedDirectives.add(parserResult.value)
+            collectedDirectives.add(parserResult.value)
 
             //Remove the parsed directive (including its value, if applicable) from the string:
             stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(parserResult.remainder)
@@ -189,11 +189,11 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
    * Returns all directives that have been collected so far.
    */
   def getDirectives: Set[Directive[?]] =
-    Set.from(parsedDirectives) //Creates an immutable copy.
+    Set.from(collectedDirectives) //Creates an immutable copy.
 
   /**
    * Clears the set of collected directives.
    */
   def reset(): Unit =
-    parsedDirectives.clear()
+    collectedDirectives.clear()
 }
