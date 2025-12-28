@@ -10,23 +10,33 @@ object KnownDirectiveParsers {
     The ability to parse directives that are no longer supported by some vendor(s) is useful, because such directives can still be encountered while crawling.
 
     Sources and references:
+      - Apple: https://support.apple.com/en-us/119829
+      - Baidu: https://www.baidu.com/search/robots_english.html
       - Bing: https://www.bing.com/webmasters/help/which-robots-metatags-does-bing-support-5198d240
+      - DeviantArt: https://www.deviantart.com/team/journal/UPDATE-All-Deviations-Are-Opted-Out-of-AI-Datasets-934500371
       - Google: https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag
-      - HTML 4: https://www.w3.org/TR/html4/appendix/notes.html#h-B.4.1.2
+      - HTML 4: https://www.w3.org/TR/html4/appendix/notes.html#h-B.4.1.2 (first published in 1997)
+      - Yandex: https://yandex.com/support/webmaster/en/controlling-robot/metatags
+      - robotstxt.org: https://www.robotstxt.org/metabof.html (report from a 1996 workshop)
    */
 
   /**
-   * Specified by: Google, HTML 4
+   * Specified by: Apple, Google, HTML 4, Yandex, robotstxt.org
    */
   val All = NamedDirectiveParser("all", SimpleDirectiveParser)
 
   /**
-   * Specified by: TODO
+   * Specified by: Yandex
+   */
+  val Archive = NamedDirectiveParser("archive", SimpleDirectiveParser)
+
+  /**
+   * Specified by: Yandex, robotstxt.org
    */
   val Follow = NamedDirectiveParser("follow", SimpleDirectiveParser)
 
   /**
-   * Specified by: HTML 4
+   * Specified by: HTML 4, Yandex, robotstxt.org
    */
   val Index = NamedDirectiveParser("index", SimpleDirectiveParser)
 
@@ -51,7 +61,12 @@ object KnownDirectiveParsers {
   val MaxVideoPreview = NamedDirectiveParser("max-video-preview", IntDirectiveParser)
 
   /**
-   * Specified by: Bing, Google (deprecated)
+   * Specified by: DeviantArt
+   */
+  val NoAi = NamedDirectiveParser("noai", SimpleDirectiveParser)
+
+  /**
+   * Specified by: Baidu, Bing, Google (deprecated), Yandex
    */
   val NoArchive = NamedDirectiveParser("noarchive", SimpleDirectiveParser)
 
@@ -61,9 +76,14 @@ object KnownDirectiveParsers {
   val NoCache = NamedDirectiveParser("nocache", SimpleDirectiveParser)
 
   /**
-   * Specified by: Google, HTML 4
+   * Specified by: Apple, Baidu, Google, HTML 4, Yandex, robotstxt.org
    */
   val NoFollow = NamedDirectiveParser("nofollow", SimpleDirectiveParser)
+
+  /**
+   * Specified by: DeviantArt
+   */
+  val NoImageAi = NamedDirectiveParser("noimageai", SimpleDirectiveParser)
 
   /**
    * Specified by: Google
@@ -71,7 +91,7 @@ object KnownDirectiveParsers {
   val NoImageIndex = NamedDirectiveParser("noimageindex", SimpleDirectiveParser)
 
   /**
-   * Specified by: Bing, Google, HTML 4
+   * Specified by: Apple, Bing, Google, HTML 4, Yandex, robotstxt.org
    */
   val NoIndex = NamedDirectiveParser("noindex", SimpleDirectiveParser)
 
@@ -81,7 +101,7 @@ object KnownDirectiveParsers {
   val NoSitelinksSearchBox = NamedDirectiveParser("nositelinkssearchbox", SimpleDirectiveParser)
 
   /**
-   * Specified by: Bing, Google
+   * Specified by: Apple, Bing, Google
    */
   val NoSnippet = NamedDirectiveParser("nosnippet", SimpleDirectiveParser)
 
@@ -91,7 +111,7 @@ object KnownDirectiveParsers {
   val NoTranslate = NamedDirectiveParser("notranslate", SimpleDirectiveParser)
 
   /**
-   * Specified by: Google
+   * Specified by: Apple, Google, Yandex, robotstxt.org
    */
   val None = NamedDirectiveParser("none", SimpleDirectiveParser)
 
@@ -102,15 +122,18 @@ object KnownDirectiveParsers {
 
   val DefaultParsers = Seq(
     All,
+    Archive,
     Follow,
     Index,
     IndexIfEmbedded,
     MaxImagePreview,
     MaxSnippet,
     MaxVideoPreview,
+    NoAi,
     NoArchive,
     NoCache,
     NoFollow,
+    NoImageAi,
     NoImageIndex,
     NoIndex,
     NoSitelinksSearchBox,
