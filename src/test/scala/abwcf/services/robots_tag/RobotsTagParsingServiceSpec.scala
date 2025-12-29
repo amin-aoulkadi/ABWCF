@@ -1,13 +1,12 @@
 package abwcf.services.robots_tag
 
+import abwcf.services.robots_tag.KnownSimpleDirectives.{Follow, Index}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import java.time.{LocalDate, ZoneOffset, ZonedDateTime}
 
 class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
-  private val Follow = Directive("follow")
-  private val Index = Directive("index")
   private val MaxImagePreview = Directive("max-image-preview", "large")
   private val UnavailableAfter = Directive("unavailable_after", LocalDate.of(2025, 12, 31))
 

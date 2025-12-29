@@ -2,6 +2,9 @@ package abwcf.services.robots_tag
 
 import abwcf.services.robots_tag.parsers.*
 
+/**
+ * [[DirectiveParser]]s for well-known directives.
+ */
 object KnownDirectiveParsers {
   case class NamedDirectiveParser[T](name: String, parser: DirectiveParser[T])
 
