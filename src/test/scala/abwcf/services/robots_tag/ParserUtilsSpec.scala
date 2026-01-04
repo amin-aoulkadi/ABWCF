@@ -43,10 +43,17 @@ class ParserUtilsSpec extends AnyFlatSpec with TableDrivenPropertyChecks {
     })
   }
 
-  "normalizeUserAgents()" should "normalize user agents" in {
-    val input = Set("foo", " FOO ", "Bar", " baz ")
-    val expectedResult = Set("foo", "bar", "baz")
-    assertResult(expectedResult)(ParserUtils.normalizeUserAgents(input))
+  "normalizeUserAgent()" should "normalize user agents" in {
+    val table = Table(
+      ("Input", "Expected Result"),
+      ("foo", "foo"),
+      ("Bar", "bar"),
+      (" baz ", "baz")
+    )
+
+    forEvery(table)((input, expectedResult) => {
+      assertResult(expectedResult)(ParserUtils.normalizeUserAgent(input))
+    })
   }
 
   "regexForCollectionElements()" should "create a regex that matches all collection elements" in {

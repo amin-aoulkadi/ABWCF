@@ -12,43 +12,43 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
 
   "RobotsTagParsingService" should "initialize and reset properly" in {
     val parser = RobotsTagParsingService()
-    assert(parser.getDirectives.isEmpty)
+    assert(parser.collectedDirectives.isEmpty)
 
     parser.parse("index, follow")
-    assert(parser.getDirectives.nonEmpty)
+    assert(parser.collectedDirectives.nonEmpty)
 
     parser.reset()
-    assert(parser.getDirectives.isEmpty)
+    assert(parser.collectedDirectives.isEmpty)
   }
 
   it should "work with empty input" in {
     val parser = RobotsTagParsingService()
     parser.parse("")
-    assert(parser.getDirectives.isEmpty)
+    assert(parser.collectedDirectives.isEmpty)
   }
 
   it should "parse individual directives" in {
     val parser = RobotsTagParsingService()
 
     parser.parse("index")
-    assertResult(Set(Index))(parser.getDirectives)
+    assertResult(Set(Index))(parser.collectedDirectives.withoutUserAgent.toSet)
 
     parser.parse("max-image-preview: large")
-    assertResult(Set(Index, MaxImagePreview))(parser.getDirectives)
+    assertResult(Set(Index, MaxImagePreview))(parser.collectedDirectives.withoutUserAgent.toSet)
   }
 
   it should "parse multiple directives" in {
     val parser = RobotsTagParsingService()
 
     parser.parse("index, follow")
-    assertResult(Set(Index, Follow))(parser.getDirectives)
+    assertResult(Set(Index, Follow))(parser.collectedDirectives.withoutUserAgent.toSet)
 
     parser.parse("max-image-preview: large, unavailable_after: 2025-12-31")
-    assertResult(Set(Index, Follow, MaxImagePreview, UnavailableAfter))(parser.getDirectives)
+    assertResult(Set(Index, Follow, MaxImagePreview, UnavailableAfter))(parser.collectedDirectives.withoutUserAgent.toSet)
 
     parser.reset()
     parser.parse("max-image-preview: large, index, unavailable_after: 2025-12-31, follow")
-    assertResult(Set(Index, Follow, MaxImagePreview, UnavailableAfter))(parser.getDirectives)
+    assertResult(Set(Index, Follow, MaxImagePreview, UnavailableAfter))(parser.collectedDirectives.withoutUserAgent.toSet)
   }
 
   it should "parse unknown simple directives under certain conditions" in {
@@ -69,7 +69,7 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     inputs.foreach(input => {
       val parser = RobotsTagParsingService()
       parser.parse(input)
-      assert(parser.getDirectives.contains(expectedDirective))
+      assert(parser.collectedDirectives.withoutUserAgent.toSet.contains(expectedDirective))
     })
   }
 
@@ -77,7 +77,7 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     val parser = RobotsTagParsingService()
     parser.parse(" Index, FOLLOW ") //Unambiguous directive string
     parser.parse(" Max-Image-Preview : large ") //Ambiguous directive string
-    assertResult(Set(Index, Follow, MaxImagePreview))(parser.getDirectives)
+    assertResult(Set(Index, Follow, MaxImagePreview))(parser.collectedDirectives.withoutUserAgent.toSet)
   }
 
   it should "eliminate duplicate directives" in {
@@ -85,23 +85,23 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
 
     //Unambiguous directive strings:
     parser.parse("index, follow, index")
-    assertResult(Set(Index, Follow))(parser.getDirectives)
+    assertResult(Set(Index, Follow))(parser.collectedDirectives.withoutUserAgent.toSet)
 
     parser.parse("follow")
-    assertResult(Set(Index, Follow))(parser.getDirectives)
+    assertResult(Set(Index, Follow))(parser.collectedDirectives.withoutUserAgent.toSet)
 
     //Ambiguous directive strings:
     parser.reset()
     parser.parse("index, max-image-preview: large, index")
-    assertResult(Set(Index, MaxImagePreview))(parser.getDirectives)
+    assertResult(Set(Index, MaxImagePreview))(parser.collectedDirectives.withoutUserAgent.toSet)
 
     parser.parse("max-image-preview: large")
-    assertResult(Set(Index, MaxImagePreview))(parser.getDirectives)
+    assertResult(Set(Index, MaxImagePreview))(parser.collectedDirectives.withoutUserAgent.toSet)
   }
 
   it should "work with input that contains excess commas" in {
     val table = Table(
-      ("Input", "Expected Result"),
+      ("Input", "Expected Result (All User Agents)"),
       //No directives:
       (",", Set.empty),
       (",,,", Set.empty),
@@ -118,7 +118,8 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     forEvery(table)((input, expectedResult) => {
       val parser = RobotsTagParsingService()
       parser.parse(input)
-      assertResult(expectedResult)(parser.getDirectives)
+      assertResult(expectedResult)(parser.collectedDirectives.withoutUserAgent.toSet)
+      assert(parser.collectedDirectives.withUserAgent.toMap.isEmpty)
     })
   }
 
@@ -134,35 +135,36 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
       assertThrows[ParserException](parser.parse(input))
     })
 
-    assert(parser.getDirectives.isEmpty) //The "index" and "follow" directives were not parsed because the exception handler threw the exceptions.
+    assert(parser.collectedDirectives.isEmpty) //The "index" and "follow" directives were not parsed because the exception handler threw the exceptions.
   }
 
   it should "recover from parsing failures" in {
     val table = Table(
-      ("Input", "Expected Result"),
+      ("Input", "Expected Result (All User Agents)", "Expected Result (Target User Agents)"),
       //The first token is part of an unknown key-value pair (skip to the next known user agent):
-      ("foo: bar, index", Set.empty), //It is unclear whether "foo" is a directive name or a user agent.
-      ("foo: bar, max-image-preview: large", Set.empty),
-      ("foo: bar, MyBot: index", Set(Index)),
-      ("foo: bar, MyBot: max-image-preview: large", Set(MaxImagePreview)),
+      ("foo: bar, index", Set.empty, Set.empty), //It is unclear whether "foo" is a directive name or a user agent.
+      ("foo: bar, max-image-preview: large", Set.empty, Set.empty),
+      ("foo: bar, MyBot: index", Set.empty, Set(Index)),
+      ("foo: bar, MyBot: max-image-preview: large", Set.empty, Set(MaxImagePreview)),
       //A DirectiveParser throws (skip to the next known directive name):
-      ("max-snippet: <invalid value>, index", Set(Index)),
-      ("max-snippet: <invalid value>, max-image-preview: large", Set(MaxImagePreview)),
-      ("max-snippet: <invalid value>, index, UnknownBot: max-image-preview: large", Set(Index)),
-      ("max-snippet: <invalid value>, max-image-preview: large, UnknownBot: index", Set(MaxImagePreview)),
+      ("max-snippet: <invalid value>, index", Set(Index), Set.empty),
+      ("max-snippet: <invalid value>, max-image-preview: large", Set(MaxImagePreview), Set.empty),
+      ("max-snippet: <invalid value>, index, UnknownBot: max-image-preview: large", Set(Index), Set.empty),
+      ("max-snippet: <invalid value>, max-image-preview: large, UnknownBot: index", Set(MaxImagePreview), Set.empty),
       //A DirectiveParser throws (skip to the next known user agent):
-      ("max-snippet: <invalid value>, UnknownBot: follow", Set.empty),
-      ("max-snippet: <invalid value>, UnknownBot: max-image-preview: large", Set.empty),
-      ("max-snippet: <invalid value>, UnknownBot: follow, MyBot: index", Set(Index)),
-      ("max-snippet: <invalid value>, UnknownBot: max-image-preview: large, MyBot: index", Set(Index)),
-      ("unavailable_after: 24:00:00, index", Set.empty), //The value of the first directive is invalid and contains colons.
-      ("unavailable_after: 24:00:00, MyBot: index", Set(Index))
+      ("max-snippet: <invalid value>, UnknownBot: follow", Set.empty, Set.empty),
+      ("max-snippet: <invalid value>, UnknownBot: max-image-preview: large", Set.empty, Set.empty),
+      ("max-snippet: <invalid value>, UnknownBot: follow, MyBot: index", Set.empty, Set(Index)),
+      ("max-snippet: <invalid value>, UnknownBot: max-image-preview: large, MyBot: index", Set.empty, Set(Index)),
+      ("unavailable_after: 24:00:00, index", Set.empty, Set.empty), //The value of the first directive is invalid and contains colons.
+      ("unavailable_after: 24:00:00, MyBot: index", Set.empty, Set(Index))
     )
 
-    forEvery(table)((input, expectedResult) => {
+    forEvery(table)((input, expectedAll, expectedTarget) => {
       val parser = RobotsTagParsingService(Set("MyBot"))
       parser.parse(input)
-      assertResult(expectedResult)(parser.getDirectives)
+      assertResult(expectedAll)(parser.collectedDirectives.withoutUserAgent.toSet)
+      assertResult(expectedTarget)(parser.collectedDirectives.withUserAgent.toSet)
     })
   }
 
@@ -176,7 +178,7 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     inputs.foreach(input => {
       val parser = RobotsTagParsingService()
       parser.parse(input)
-      assertResult(Set(Index))(parser.getDirectives)
+      assertResult(Set(Index))(parser.collectedDirectives.withoutUserAgent.toSet)
     })
   }
 
@@ -189,7 +191,7 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     inputs.foreach(input => {
       val parser = RobotsTagParsingService()
       parser.parse(input)
-      assert(parser.getDirectives.isEmpty)
+      assert(parser.collectedDirectives.isEmpty)
     })
   }
 
@@ -204,21 +206,28 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
 
     inputs.foreach(input => {
       parser.parse(input)
-      assertResult(Set(Index))(parser.getDirectives)
+      assertResult(Set(Index))(parser.collectedDirectives.withoutUserAgent.toSet)
     })
 
     parser.parse("index, MyBot-1: follow")
-    assert(parser.getDirectives.contains(Index))
+    assert(parser.collectedDirectives.withoutUserAgent.toSet.contains(Index))
   }
 
   it should "collect directives that apply to the target user agents" in {
     val parser = RobotsTagParsingService(Set("MyBot-1", "MyBot-2"))
 
-    parser.parse("MyBot-1: index")
-    assertResult(Set(Index))(parser.getDirectives)
+    parser.parse("MyBot-1: index, follow")
+    assertResult(Set(Index, Follow))(parser.collectedDirectives.withUserAgent.toSet)
 
-    parser.parse("MyBot-2: follow")
-    assertResult(Set(Index, Follow))(parser.getDirectives)
+    parser.parse("MyBot-2: max-image-preview: large")
+    assertResult(Set(Index, Follow, MaxImagePreview))(parser.collectedDirectives.withUserAgent.toSet)
+
+    val expectedUserAgentGroups = Map(
+      ("mybot-1", Set(Index, Follow)),
+      ("mybot-2", Set(MaxImagePreview))
+    )
+
+    assertResult(expectedUserAgentGroups)(parser.collectedDirectives.withUserAgent.toMap)
 
     val inputs = Seq(
       "MyBot-1: index, follow",
@@ -230,7 +239,7 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     inputs.foreach(input => {
       parser.reset()
       parser.parse(input)
-      assertResult(Set(Index, Follow))(parser.getDirectives)
+      assertResult(Set(Index, Follow))(parser.collectedDirectives.withUserAgent.toSet)
     })
   }
 
@@ -244,31 +253,32 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
 
     val parser = RobotsTagParsingService(Set("MyBot-1", "MyBot-2"))
     inputs.foreach(parser.parse)
-    assert(parser.getDirectives.isEmpty)
+    assert(parser.collectedDirectives.isEmpty)
   }
 
   it should "perform case-insensitive user agent matching" in {
     val parser = RobotsTagParsingService(Set("MyBot"))
     parser.parse("mybot: index")
-    assertResult(Set(Index))(parser.getDirectives)
+    assertResult(Set(Index))(parser.collectedDirectives.withUserAgent.toSet)
   }
 
   it should "work with empty user agent groups" in {
     val table = Table(
-      ("Input", "Expected Result"),
-      ("MyBot:", Set.empty),
-      ("UnknownBot:", Set.empty),
-      ("index, MyBot:", Set(Index)),
-      ("index, UnknownBot:", Set(Index)),
-      ("MyBot: MyBot: index", Set(Index)),
-      ("MyBot: UnknownBot: index", Set.empty),
-      ("UnknownBot: MyBot: index", Set(Index))
+      ("Input", "Expected Result (All User Agents)", "Expected Result (Target User Agents)"),
+      ("MyBot:", Set.empty, Set.empty),
+      ("UnknownBot:", Set.empty, Set.empty),
+      ("index, MyBot:", Set(Index), Set.empty),
+      ("index, UnknownBot:", Set(Index), Set.empty),
+      ("MyBot: MyBot: index", Set.empty, Set(Index)),
+      ("MyBot: UnknownBot: index", Set.empty, Set.empty),
+      ("UnknownBot: MyBot: index", Set.empty, Set(Index))
     )
 
-    forEvery(table)((input, expectedResult) => {
+    forEvery(table)((input, expectedAll, expectedTarget) => {
       val parser = RobotsTagParsingService(Set("MyBot"))
       parser.parse(input)
-      assertResult(expectedResult)(parser.getDirectives)
+      assertResult(expectedAll)(parser.collectedDirectives.withoutUserAgent.toSet)
+      assertResult(expectedTarget)(parser.collectedDirectives.withUserAgent.toSet)
     })
   }
 
@@ -276,17 +286,18 @@ class RobotsTagParsingServiceSpec extends AnyFlatSpec with TableDrivenPropertyCh
     val unavailableAfter = Directive("unavailable_after", ZonedDateTime.of(2025, 12, 31, 23, 59, 59, 0, ZoneOffset.UTC).toInstant)
 
     val table = Table(
-      ("Input", "Expected Result"),
-      ("max-image-preview: large, unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT, index, follow", Set(MaxImagePreview, unavailableAfter, Index, Follow)),
-      ("UnknownBot: foo, MyBot: index, UnknownBot: bar: 100, baz: 200, MyBot: max-image-preview: large, UnknownBot: foo, bar, baz, MyBot: unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT", Set(Index, MaxImagePreview, unavailableAfter)),
-      ("UnknownBot: MyBot: unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT, max-image-preview: large, index", Set(unavailableAfter, MaxImagePreview, Index)),
-      ("index, foo: bar, max-image-preview: large, MyBot: follow", Set(Index, Follow))
+      ("Input", "Expected Result (All User Agents)", "Expected Result (Target User Agents)"),
+      ("max-image-preview: large, unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT, index, follow", Set(MaxImagePreview, unavailableAfter, Index, Follow), Set.empty),
+      ("UnknownBot: foo, MyBot: index, UnknownBot: bar: 100, baz: 200, MyBot: max-image-preview: large, UnknownBot: foo, bar, baz, MyBot: unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT", Set.empty, Set(Index, MaxImagePreview, unavailableAfter)),
+      ("UnknownBot: MyBot: unavailable_after: Wed, 31 Dec 2025 23:59:59 GMT, max-image-preview: large, index", Set.empty, Set(unavailableAfter, MaxImagePreview, Index)),
+      ("index, foo: bar, max-image-preview: large, MyBot: follow", Set(Index), Set(Follow))
     )
 
-    forEvery(table)((input, expectedResult) => {
+    forEvery(table)((input, expectedAll, expectedTarget) => {
       val parser = RobotsTagParsingService(Set("MyBot"))
       parser.parse(input)
-      assertResult(expectedResult)(parser.getDirectives)
+      assertResult(expectedAll)(parser.collectedDirectives.withoutUserAgent.toSet)
+      assertResult(expectedTarget)(parser.collectedDirectives.withUserAgent.toSet)
     })
   }
 }

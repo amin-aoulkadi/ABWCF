@@ -2,8 +2,6 @@ package abwcf.services.robots_tag
 
 import abwcf.services.robots_tag.parsers.SimpleDirectiveParser
 
-import java.util.Locale
-import scala.collection.mutable
 import scala.util.matching.Regex
 
 object RobotsMetaParsingService {
@@ -71,10 +69,10 @@ object RobotsMetaParsingService {
  * This parser is not thread-safe.
  *
  * @param targetUserAgents       The target user agents.
- *                               The parser collects directives that apply to a target user agent.
+ *                               The parser collects directives if they apply to a target user agent.
  *                               Directives that only apply to non-target user agents are not collected.
  *                               Directives that apply to all user agents are always collected.
- * @param directiveParsersByName Lowercased and trimmed directive names mapped to [[DirectiveParser]]s that can parse the corresponding directives.
+ * @param directiveParsersByName Trimmed and lowercased directive names mapped to [[DirectiveParser]]s that can parse the corresponding directives.
  *                               The default value is [[KnownDirectiveParsers.DefaultParsersByName]].
  * @param exceptionHandler       The parser invokes this function when it encounters a [[ParserException]] while parsing.
  *                               Use this function to ignore, throw, log, count or collect exceptions.
@@ -98,17 +96,17 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
   /**
    * The target user agents configured by the user, normalized.
    */
-  private val normalizedTargetUserAgents = ParserUtils.normalizeUserAgents(targetUserAgents)
-
-  /**
-   * All directives collected by the parser so far.
-   */
-  private val collectedDirectives = mutable.Set.empty[Directive[?]]
+  private val normalizedTargetUserAgents = targetUserAgents.map(ParserUtils.normalizeUserAgent)
 
   /**
    * A regular expression that matches all directive names known to the parser.
    */
   private val knownDirectiveNamesRegex = ParserUtils.regexForCollectionElements(directiveParsersByName.keys)
+
+  /**
+   * All directives that have been collected since the last reset.
+   */
+  private val directiveCollection = ModifiableDirectiveCollection()
 
   /**
    * Parses a `<meta name="robots" content="...">` HTML element.
@@ -123,16 +121,17 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
    * @throws Exception if the [[exceptionHandler]] throws an exception
    */
   def parse(metaElement: String): Unit = {
-    val shouldCollect = getNameAttribute(metaElement)
-      .map(_.trim.toLowerCase(Locale.ROOT)) //Normalizes the name.
-      .exists(name => name == "robots" || normalizedTargetUserAgents.contains(name))
+    val nameOption = getNameAttribute(metaElement).map(ParserUtils.normalizeUserAgent)
+    val shouldCollect = nameOption.exists(name => name == "robots" || normalizedTargetUserAgents.contains(name))
 
     if (shouldCollect) {
       getContentAttribute(metaElement).foreach(content => {
+        val name = nameOption.get
+
         if (content.contains(':')) {
-          parseAmbiguousString(content)
+          parseAmbiguousString(name, content)
         } else {
-          collectedDirectives.addAll(UnambiguousStringParser.parse(content))
+          UnambiguousStringParser.parse(content).foreach(collectDirective(name, _))
         }
       })
     }
@@ -149,7 +148,7 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
    *
    * @throws Exception if the [[exceptionHandler]] throws an exception
    */
-  private def parseAmbiguousString(content: String): Unit = {
+  private def parseAmbiguousString(name: String, content: String): Unit = {
     var stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(content)
 
     while (stringToParse.nonEmpty) {
@@ -168,7 +167,7 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
           try {
             //Parse and collect the first directive:
             val parserResult = parser.parse(preprocessed)
-            collectedDirectives.add(parserResult.value)
+            collectDirective(name, parserResult.value)
 
             //Remove the parsed directive (including its value, if applicable) from the string:
             stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(parserResult.remainder)
@@ -185,15 +184,20 @@ class RobotsMetaParsingService(targetUserAgents: Set[String] = Set.empty,
     }
   }
 
+  private def collectDirective(name: String, directive: Directive[?]): Unit = name match {
+    case "robots" => directiveCollection.addDirective(directive)
+    case _ => directiveCollection.addDirective(name, directive)
+  }
+
   /**
-   * Returns all directives that have been collected so far.
+   * Returns all directives that have been collected since the last reset.
    */
-  def getDirectives: Set[Directive[?]] =
-    Set.from(collectedDirectives) //Creates an immutable copy.
+  def collectedDirectives: DirectiveCollection =
+    directiveCollection
 
   /**
    * Clears the set of collected directives.
    */
   def reset(): Unit =
-    collectedDirectives.clear()
+    directiveCollection.clear()
 }

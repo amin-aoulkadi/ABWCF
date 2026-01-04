@@ -2,18 +2,16 @@ package abwcf.services.robots_tag
 
 import abwcf.services.robots_tag.parsers.SimpleDirectiveParser
 
-import scala.collection.mutable
-
 /**
  * Parses the content of `X-Robots-Tag` HTTP response headers.
  *
  * This parser is not thread-safe.
  *
  * @param targetUserAgents       The target user agents.
- *                               The parser collects directives that apply to a target user agent.
+ *                               The parser collects directives if they apply to a target user agent.
  *                               Directives that only apply to non-target user agents are not collected.
  *                               Directives that apply to all user agents are always collected.
- * @param directiveParsersByName Lowercased and trimmed directive names mapped to [[DirectiveParser]]s that can parse the corresponding directives.
+ * @param directiveParsersByName Trimmed and lowercased directive names mapped to [[DirectiveParser]]s that can parse the corresponding directives.
  *                               The default value is [[KnownDirectiveParsers.DefaultParsersByName]].
  * @param exceptionHandler       The parser invokes this function when it encounters a [[ParserException]] while parsing.
  *                               Use this function to ignore, throw, log, count or collect exceptions.
@@ -35,12 +33,7 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
   /**
    * The target user agents configured by the user, normalized.
    */
-  private val normalizedTargetUserAgents = ParserUtils.normalizeUserAgents(targetUserAgents)
-
-  /**
-   * All directives collected by the parser so far.
-   */
-  private val collectedDirectives = mutable.Set.empty[Directive[?]]
+  private val normalizedTargetUserAgents = targetUserAgents.map(ParserUtils.normalizeUserAgent)
 
   /**
    * A regular expression that matches all directive names known to the parser.
@@ -51,6 +44,11 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
    * A regular expression that matches all user agents known to the parser.
    */
   private val knownUserAgentsRegex = ParserUtils.regexForCollectionElements(normalizedTargetUserAgents)
+
+  /**
+   * All directives that have been collected since the last reset.
+   */
+  private val directiveCollection = ModifiableDirectiveCollection()
 
   /**
    * Parses an `X-Robots-Tag` HTTP response header.
@@ -66,7 +64,7 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
     if (robotsHeader.contains(':')) {
       parseAmbiguousString(robotsHeader)
     } else {
-      collectedDirectives.addAll(UnambiguousStringParser.parse(robotsHeader))
+      UnambiguousStringParser.parse(robotsHeader).foreach(directiveCollection.addDirective)
     }
   }
 
@@ -84,11 +82,14 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
    */
   private def parseAmbiguousString(robotsHeader: String): Unit = {
     var stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(robotsHeader)
+    var currentUserAgent: Option[String] = None
 
     while (stringToParse.nonEmpty) {
       val preprocessed = PreprocessedString(stringToParse)
 
       if (preprocessed.delimiter.contains(':') && normalizedTargetUserAgents.contains(preprocessed.firstToken)) { //The first token is a target user agent.
+        currentUserAgent = Some(preprocessed.firstToken)
+
         //Remove the user agent from the string:
         stringToParse = preprocessed.tail
           .map(ParserUtils.removeUnnecessaryLeadingCharacters)
@@ -107,7 +108,11 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
             try {
               //Parse and collect the first directive:
               val parserResult = parser.parse(preprocessed)
-              collectedDirectives.add(parserResult.value)
+
+              currentUserAgent match {
+                case Some(userAgent) => directiveCollection.addDirective(userAgent, parserResult.value)
+                case None => directiveCollection.addDirective(parserResult.value)
+              }
 
               //Remove the parsed directive (including its value, if applicable) from the string:
               stringToParse = ParserUtils.removeUnnecessaryLeadingCharacters(parserResult.remainder)
@@ -140,14 +145,14 @@ class RobotsTagParsingService(targetUserAgents: Set[String] = Set.empty,
   }
 
   /**
-   * Returns all directives that have been collected so far.
+   * Returns all directives that have been collected since the last reset.
    */
-  def getDirectives: Set[Directive[?]] =
-    Set.from(collectedDirectives) //Creates an immutable copy.
+  def collectedDirectives: DirectiveCollection =
+    directiveCollection
 
   /**
    * Clears the set of collected directives.
    */
   def reset(): Unit =
-    collectedDirectives.clear()
+    directiveCollection.clear()
 }

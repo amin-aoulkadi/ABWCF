@@ -31,11 +31,11 @@ object ParserUtils {
   }
 
   /**
-   * Trims and lowercases all user agents from a set of user agents.
+   * Normalizes a user agent by trimming and lowercasing it.
    */
-  def normalizeUserAgents(userAgents: Set[String]): Set[String] =
-    userAgents.map(_.trim.toLowerCase(Locale.ROOT))
-
+  def normalizeUserAgent(userAgent: String): String =
+    userAgent.trim.toLowerCase(Locale.ROOT)
+  
   /**
    * Returns a case-insensitive regular expression that matches all elements of a collection.
    * 
