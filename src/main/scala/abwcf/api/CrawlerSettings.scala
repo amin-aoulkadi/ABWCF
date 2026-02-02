@@ -1,10 +1,10 @@
 package abwcf.api
 
-import io.opentelemetry.api.OpenTelemetry
+import io.opentelemetry.api.{GlobalOpenTelemetry, OpenTelemetry}
 
 case class CrawlerSettings(
                             userCode: UserCode = new UserCode {},
-                            openTelemetry: OpenTelemetry = OpenTelemetry.noop()
+                            openTelemetry: OpenTelemetry = GlobalOpenTelemetry.getOrNoop()
                           ) {
   def withUserCode(userCode: UserCode): CrawlerSettings =
     copy(userCode = userCode)
