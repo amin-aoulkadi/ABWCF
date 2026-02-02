@@ -17,7 +17,6 @@ val scalaTestVersion = "3.2.19" //License: Apache-2.0
 
 libraryDependencies ++= Seq(
   "org.apache.pekko" %% "pekko-actor-typed" % pekkoVersion,
-  "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekkoVersion % Test,
   "org.apache.pekko" %% "pekko-cluster-typed" % pekkoVersion,
   "org.apache.pekko" %% "pekko-cluster-sharding-typed" % pekkoVersion,
   "org.apache.pekko" %% "pekko-connectors-slick" % pekkoSlickVersion,
