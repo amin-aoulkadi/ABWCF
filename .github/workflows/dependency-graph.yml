@@ -4,12 +4,15 @@
 # This makes Dependabot alerts possible. However, Dependabot security updates and Dependabot version updates for sbt dependencies remain unavailable because Dependabot does not support sbt.
 #
 
-name: Update Dependency Graph
+name: Dependency Graph
 
 on:
   push:
     branches:
       - main
+    paths:
+      - '*.sbt'
+      - 'project/**'
 
 permissions:
   contents: write # Required to submit the dependency graph to GitHub.

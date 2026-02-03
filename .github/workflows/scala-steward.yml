@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   scala-steward:
-    name: Scala Steward
+    name: Run Scala Steward
     runs-on: ubuntu-latest
     steps:
       - uses: scala-steward-org/scala-steward-action@v2
