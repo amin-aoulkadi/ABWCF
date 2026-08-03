@@ -18,4 +18,4 @@ jobs:
     name: Run Scala Steward
     runs-on: ubuntu-latest
     steps:
-      - uses: scala-steward-org/scala-steward-action@v2
+      - uses: scala-steward-org/scala-steward-action@v2.92.0
