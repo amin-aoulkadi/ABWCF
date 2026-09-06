@@ -1,19 +1,19 @@
 ThisBuild / version := "1.0.0-SNAPSHOT"
-ThisBuild / scalaVersion := "3.3.6" //The Pekko documentation lists compatible Scala versions for each Pekko module.
+ThisBuild / scalaVersion := "3.3.8" //The Pekko documentation lists compatible Scala versions for each Pekko module.
 
 lazy val abwcf = (project in file("."))
   .settings(
     name := "ABWCF"
   )
 
-val pekkoVersion = "1.4.0" //License: Apache-2.0
-val pekkoHttpVersion = "1.3.0" //License: Apache-2.0
-val pekkoSlickVersion = "1.2.0" //License: Apache-2.0
-val caffeineVersion = "3.2.3" //License: Apache-2.0
+val pekkoVersion = "1.7.0" //License: Apache-2.0
+val pekkoHttpVersion = "1.4.0" //License: Apache-2.0
+val pekkoSlickVersion = "1.3.0" //License: Apache-2.0
+val caffeineVersion = "3.2.4" //License: Apache-2.0
 val crawlerCommonsVersion = "1.6" //License: Apache-2.0
-val jsoupVersion = "1.22.1" //License: MIT
-val openTelemetryApiVersion = "1.58.0" //License: Apache-2.0
-val scalaTestVersion = "3.2.19" //License: Apache-2.0
+val jsoupVersion = "1.23.2" //License: MIT
+val openTelemetryApiVersion = "1.65.0" //License: Apache-2.0
+val scalaTestVersion = "3.2.20" //License: Apache-2.0
 
 libraryDependencies ++= Seq(
   "org.apache.pekko" %% "pekko-actor-typed" % pekkoVersion,
