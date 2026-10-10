@@ -12,7 +12,7 @@ val pekkoSlickVersion = "1.3.0" //License: Apache-2.0
 val caffeineVersion = "3.2.4" //License: Apache-2.0
 val crawlerCommonsVersion = "1.6" //License: Apache-2.0
 val jsoupVersion = "1.23.2" //License: MIT
-val openTelemetryApiVersion = "1.65.0" //License: Apache-2.0
+val openTelemetryApiVersion = "1.67.0" //License: Apache-2.0
 val scalaTestVersion = "3.2.20" //License: Apache-2.0
 
 libraryDependencies ++= Seq(
