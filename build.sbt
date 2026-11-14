@@ -6,7 +6,7 @@ lazy val abwcf = (project in file("."))
     name := "ABWCF"
   )
 
-val pekkoVersion = "1.7.0" //License: Apache-2.0
+val pekkoVersion = "1.7.1" //License: Apache-2.0
 val pekkoHttpVersion = "1.4.0" //License: Apache-2.0
 val pekkoSlickVersion = "1.3.0" //License: Apache-2.0
 val caffeineVersion = "3.2.4" //License: Apache-2.0
